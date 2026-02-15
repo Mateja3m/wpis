@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import {
   Accordion,
   AccordionDetails,
@@ -85,7 +85,16 @@ export default function Page(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
   const [creating, setCreating] = useState(false);
-  const verifyRequestInFlight = useRef(false);
+
+  const statusReason = (currentStatus: PaymentStatus | null): string | null => {
+    if (currentStatus === "PENDING") {
+      return "Waiting for matching Sepolia transaction (recipient + amount + active window).";
+    }
+    if (currentStatus === "DETECTED") {
+      return "Transaction detected. Waiting for required confirmations.";
+    }
+    return null;
+  };
 
   const intentInput = useMemo<CreateIntentInput>(() => {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
@@ -99,7 +108,7 @@ export default function Page(): ReactElement {
         assetType === "native"
           ? { symbol: "ETH", decimals: 18, type: "native" }
           : { symbol: "USDC", decimals: 6, type: "erc20", contractAddress },
-      confirmationPolicy: { minConfirmations: 2 }
+      confirmationPolicy: { minConfirmations: 1 }
     };
   }, [amount, assetType, contractAddress, networkCaip2, recipient]);
 
@@ -114,26 +123,20 @@ export default function Page(): ReactElement {
       if (cancelled) {
         return;
       }
-      if (verifyRequestInFlight.current) {
-        return;
-      }
-      verifyRequestInFlight.current = true;
       try {
-        const response = await fetchWithTimeout(`${verifierUrl}/intents/${created.intent.id}/verify`, { method: "POST" }, 0);
+        const response = await fetchWithTimeout(`${verifierUrl}/intents/${created.intent.id}`, { cache: "no-store" });
         if (!response.ok) {
           return;
         }
-        const payload = (await response.json()) as { status: PaymentStatus; confirmations?: number; reason?: string };
+        const payload = (await response.json()) as { status: PaymentStatus };
         setStatus(payload.status);
-        setConfirmations(payload.confirmations ?? null);
-        setVerificationReason(payload.reason ?? null);
+        setVerificationReason(statusReason(payload.status));
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           return;
         }
         setBackendStatus("disconnected");
       } finally {
-        verifyRequestInFlight.current = false;
         if (!cancelled) {
           setTimeout(() => {
             void poll();
@@ -192,7 +195,7 @@ export default function Page(): ReactElement {
       setCreated(payload);
       setStatus(payload.intent.status);
       setConfirmations(null);
-      setVerificationReason(null);
+      setVerificationReason(statusReason(payload.intent.status));
       setOpen(true);
       setBackendStatus("connected");
     } catch {
