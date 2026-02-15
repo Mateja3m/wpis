@@ -17,7 +17,7 @@ Infrastructure-only developer tooling primitive for deterministic payment intent
 - `@wpis/adapter-arbitrum`: Arbitrum One adapter using `viem`.
 - `@wpis/verifier`: SQLite-backed verification API with polling + health endpoint.
 - `@wpis/react`: minimal reusable payment UI primitives.
-- `@wpis/demo-next`: MUI developer playground reference app.
+- `@wpis/demo`: MUI developer playground reference app.
 
 ## What This Does Not Solve
 - Not a payment provider.
@@ -42,7 +42,7 @@ Infrastructure-only developer tooling primitive for deterministic payment intent
     /verifier
     /react
   /apps
-    /demo-next
+    /demo
 ```
 
 ## Environment

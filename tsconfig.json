@@ -5,6 +5,6 @@
     { "path": "packages/adapter-arbitrum" },
     { "path": "packages/verifier" },
     { "path": "packages/react" },
-    { "path": "apps/demo-next" }
+    { "path": "apps/demo" }
   ]
 }
