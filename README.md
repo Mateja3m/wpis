@@ -31,7 +31,7 @@ Infrastructure-only developer tooling primitive for deterministic payment intent
 2. Intent JSON and lifecycle state are persisted in SQLite.
 3. Verification (`POST /intents/:id/verify` and poller) applies strict state transition guards.
 4. Health endpoint (`GET /health`) reports RPC connectivity, chain id, and DB availability.
-5. Demo playground consumes verifier APIs for development/testing.
+5. Demo playground polls `GET /intents/:id`; verifier poller is the canonical verification writer.
 
 ## Monorepo Structure
 ```text
@@ -52,7 +52,7 @@ cp .env.example .env
 Variables:
 - `EVM_RPC_URL`: Arbitrum RPC URL (default points to Arbitrum Sepolia).
 - `ARBITRUM_CHAIN_ID`: expected EVM chain id (Sepolia `421614`, mainnet `42161`).
-- `EVM_SCAN_BLOCKS`: verification scan depth window.
+- `EVM_SCAN_BLOCKS`: verification scan depth window (default `150` for Sepolia dev feedback).
 - `PORT`: verifier HTTP port.
 - `NEXT_PUBLIC_VERIFIER_URL`: frontend target verifier URL.
 - `NEXT_PUBLIC_CHAIN_ID`: chain id sent by demo app (`eip155:421614` for Sepolia).
@@ -69,6 +69,9 @@ npm run dev
 - Verifier API (`@wpis/verifier`): `http://localhost:4000`
   - Health: `http://localhost:4000/health`
   - Intents: `http://localhost:4000/intents`
+- Runtime ownership:
+  - `:3000` UI only displays intent state and polls `GET /intents/:id`.
+  - `:4000` verifier performs verification via background poller every 10s.
 
 Troubleshooting:
 - If `Create Intent` fails with `ERR_CONNECTION_REFUSED`, verify `http://localhost:4000/health` is reachable.
@@ -82,7 +85,7 @@ Troubleshooting:
    - amount must be `>=` intent amount,
    - for ERC20, token contract must match.
 5. Wait for chain confirmations:
-   - status moves `PENDING -> DETECTED -> CONFIRMED`.
+   - demo creates intents with `minConfirmations=1` on Sepolia, so status can confirm faster.
 
 Note: verification is automatic.
 
