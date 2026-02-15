@@ -55,6 +55,7 @@ export interface EvmClient {
 export interface ArbitrumAdapterOptions {
   rpcUrl?: string;
   scanBlocks?: bigint;
+  expectedChainId?: number;
   now?: () => Date;
   isReferenceUsed?: (reference: string) => boolean;
   markReferenceUsed?: (reference: string) => void;
@@ -122,6 +123,8 @@ function createDefaultClient(rpcUrl?: string): EvmClient {
 
 export class ArbitrumAdapter implements ChainAdapter {
   private readonly scanBlocks: bigint;
+  private readonly expectedChainId: number;
+  private readonly expectedCaip2: string;
   private readonly now: () => Date;
   private readonly isReferenceUsed: (reference: string) => boolean;
   private readonly markReferenceUsed: (reference: string) => void;
@@ -129,6 +132,8 @@ export class ArbitrumAdapter implements ChainAdapter {
 
   public constructor(options: ArbitrumAdapterOptions = {}) {
     this.scanBlocks = options.scanBlocks ?? DEFAULT_SCAN_BLOCKS;
+    this.expectedChainId = options.expectedChainId ?? ARBITRUM_CHAIN_ID;
+    this.expectedCaip2 = `eip155:${this.expectedChainId}`;
     this.now = options.now ?? (() => new Date());
 
     const seenReferences = new Set<string>();
@@ -145,9 +150,9 @@ export class ArbitrumAdapter implements ChainAdapter {
   public createIntent(input: CreateIntentInput): PaymentIntent {
     validateCreateIntentInput(input);
 
-    const chainId = input.chainId ?? ARBITRUM_CAIP2;
-    if (chainId !== ARBITRUM_CAIP2) {
-      throw new WpisError("CHAIN_MISMATCH", `chainId must be ${ARBITRUM_CAIP2}`);
+    const chainId = input.chainId ?? this.expectedCaip2;
+    if (chainId !== this.expectedCaip2) {
+      throw new WpisError("CHAIN_MISMATCH", `chainId must be ${this.expectedCaip2}`);
     }
 
     if (this.isReferenceUsed(input.reference)) {
@@ -181,8 +186,8 @@ export class ArbitrumAdapter implements ChainAdapter {
   public buildRequest(intent: PaymentIntent): PaymentRequest {
     const paymentLink =
       intent.asset.type === "native"
-        ? `ethereum:${intent.recipient}@${ARBITRUM_CHAIN_ID}?value=${intent.amount}`
-        : `ethereum:${intent.asset.contractAddress}@${ARBITRUM_CHAIN_ID}/transfer?address=${intent.recipient}&uint256=${intent.amount}`;
+        ? `ethereum:${intent.recipient}@${this.expectedChainId}?value=${intent.amount}`
+        : `ethereum:${intent.asset.contractAddress}@${this.expectedChainId}/transfer?address=${intent.recipient}&uint256=${intent.amount}`;
 
     const instructions = [
       "Developer PoC mapping strategy: recipient + amount + scan window.",
@@ -209,10 +214,10 @@ export class ArbitrumAdapter implements ChainAdapter {
   }
 
   public async verify(intent: PaymentIntent): Promise<VerificationResult> {
-    if (intent.chainId !== ARBITRUM_CAIP2) {
+    if (intent.chainId !== this.expectedCaip2) {
       return {
         status: "FAILED",
-        reason: `intent chain mismatch: expected ${ARBITRUM_CAIP2}`,
+        reason: `intent chain mismatch: expected ${this.expectedCaip2}`,
         errorCode: "CHAIN_MISMATCH"
       };
     }
@@ -227,10 +232,10 @@ export class ArbitrumAdapter implements ChainAdapter {
 
     try {
       const rpcChainId = await this.client.getChainId();
-      if (rpcChainId !== ARBITRUM_CHAIN_ID) {
+      if (rpcChainId !== this.expectedChainId) {
         return {
           status: "FAILED",
-          reason: `rpc chain mismatch: expected ${ARBITRUM_CHAIN_ID}, got ${rpcChainId}`,
+          reason: `rpc chain mismatch: expected ${this.expectedChainId}, got ${rpcChainId}`,
           errorCode: "CHAIN_MISMATCH"
         };
       }

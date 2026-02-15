@@ -1,4 +1,4 @@
-# WPIS - Web3 Payment Infrastructure Standard (Arbitrum One PoC)
+# WPIS - Web3 Payment Infrastructure Standard (Arbitrum PoC)
 
 Infrastructure-only developer tooling primitive for deterministic payment intent verification on Arbitrum One.
 
@@ -8,7 +8,7 @@ Infrastructure-only developer tooling primitive for deterministic payment intent
 - Runs as self-hosted infrastructure in developer-controlled environments.
 
 ## Arbitrum Ecosystem Benefit
-- Standardizes intent verification semantics for Arbitrum One (`42161`).
+- Standardizes intent verification semantics for Arbitrum networks.
 - Reduces duplicated verification logic across ecosystem projects.
 - Improves reliability of off-chain tooling that depends on on-chain payment detection.
 
@@ -44,16 +44,18 @@ Infrastructure-only developer tooling primitive for deterministic payment intent
   /demo-app
 ```
 
-## Environment
+## Environment (Default: Arbitrum Sepolia)
 ```bash
 cp .env.example .env
 ```
 
 Variables:
-- `EVM_RPC_URL`: Arbitrum One RPC URL.
+- `EVM_RPC_URL`: Arbitrum RPC URL (default points to Arbitrum Sepolia).
+- `ARBITRUM_CHAIN_ID`: expected EVM chain id (Sepolia `421614`, mainnet `42161`).
 - `EVM_SCAN_BLOCKS`: verification scan depth window.
 - `PORT`: verifier HTTP port.
 - `NEXT_PUBLIC_VERIFIER_URL`: frontend target verifier URL.
+- `NEXT_PUBLIC_CHAIN_ID`: chain id sent by demo app (`eip155:421614` for Sepolia).
 
 ## Run
 ```bash
@@ -70,6 +72,27 @@ npm run dev
 
 Troubleshooting:
 - If `Create Intent` fails with `ERR_CONNECTION_REFUSED`, verify `http://localhost:4000/health` is reachable.
+
+## Test on Arbitrum Sepolia (Realistic Flow)
+1. Keep default `.env` values from `.env.example` (Sepolia settings).
+2. Run `npm run dev`.
+3. Create intent in UI.
+4. Send a real matching Sepolia ETH/ERC20 transfer from an external wallet:
+   - recipient must match intent recipient,
+   - amount must be `>=` intent amount,
+   - for ERC20, token contract must match.
+5. Wait for chain confirmations:
+   - status moves `PENDING -> DETECTED -> CONFIRMED`.
+
+Note: verification is automatic.
+
+## Switch to Arbitrum One (Production Network)
+Update `.env`:
+- `EVM_RPC_URL=https://arb1.arbitrum.io/rpc`
+- `ARBITRUM_CHAIN_ID=42161`
+- `NEXT_PUBLIC_CHAIN_ID=eip155:42161`
+
+Restart dev services after env changes.
 
 ## API
 - `GET /health`

@@ -25,7 +25,7 @@ import type { CreateIntentInput, PaymentIntent, PaymentStatus } from "@wpis/core
 import { QRCodeSVG } from "qrcode.react";
 
 const verifierUrl = process.env.NEXT_PUBLIC_VERIFIER_URL ?? "http://localhost:4000";
-const simulationEnabled = process.env.NEXT_PUBLIC_ENABLE_SIMULATION === "true";
+const networkCaip2 = process.env.NEXT_PUBLIC_CHAIN_ID ?? "eip155:421614";
 
 type AssetType = "native" | "erc20";
 
@@ -85,7 +85,6 @@ export default function Page(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
   const [creating, setCreating] = useState(false);
-  const [simulating, setSimulating] = useState(false);
   const verifyRequestInFlight = useRef(false);
 
   const intentInput = useMemo<CreateIntentInput>(() => {
@@ -95,14 +94,14 @@ export default function Page(): ReactElement {
       amount,
       reference: "dev-playground-placeholder",
       expiresAt,
-      chainId: "eip155:42161",
+      chainId: networkCaip2,
       asset:
         assetType === "native"
           ? { symbol: "ETH", decimals: 18, type: "native" }
           : { symbol: "USDC", decimals: 6, type: "erc20", contractAddress },
       confirmationPolicy: { minConfirmations: 2 }
     };
-  }, [amount, assetType, contractAddress, recipient]);
+  }, [amount, assetType, contractAddress, networkCaip2, recipient]);
 
   useEffect(() => {
     if (!open || !created?.intent.id) {
@@ -193,31 +192,6 @@ export default function Page(): ReactElement {
       setError("Verifier API is unreachable. Check that http://localhost:4000/health is online.");
     } finally {
       setCreating(false);
-    }
-  };
-
-  const simulateStatus = async (targetStatus: PaymentStatus): Promise<void> => {
-    if (!created?.intent.id) {
-      return;
-    }
-    setError(null);
-    setSimulating(true);
-    try {
-      const response = await fetchWithTimeout(`${verifierUrl}/intents/${created.intent.id}/simulate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: targetStatus })
-      });
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: string };
-        setError(payload.error ?? "Failed to simulate status");
-        return;
-      }
-      setStatus(targetStatus);
-    } catch {
-      setError("Simulation request failed. Check backend connectivity.");
-    } finally {
-      setSimulating(false);
     }
   };
 
@@ -323,43 +297,6 @@ export default function Page(): ReactElement {
                 </Typography>
                 <Typography variant="body2">Confirmations: {confirmations ?? "N/A"}</Typography>
                 <Typography variant="body2">Expires at: {formatUsDateTime(created.intent.expiresAt)}</Typography>
-
-                {simulationEnabled ? (
-                  <Box
-                    sx={{
-                      p: 1.5,
-                      border: "1px solid #e5e7eb",
-                      borderRadius: 1.5,
-                      background: "#f9fafb"
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                      Dev simulation
-                    </Typography>
-                    <Stack direction="row" spacing={1}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        disabled={simulating}
-                        onClick={() => {
-                          void simulateStatus("DETECTED");
-                        }}
-                      >
-                        Mark DETECTED
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        disabled={simulating}
-                        onClick={() => {
-                          void simulateStatus("CONFIRMED");
-                        }}
-                      >
-                        Mark CONFIRMED
-                      </Button>
-                    </Stack>
-                  </Box>
-                ) : null}
 
                 <Accordion disableGutters>
                   <AccordionSummary>
