@@ -41,8 +41,7 @@ Infrastructure-only developer tooling primitive for deterministic payment intent
     /adapter-arbitrum
     /verifier
     /react
-  /app
-    /demo
+  /demo-app
 ```
 
 ## Environment
