@@ -199,6 +199,15 @@ export class ArbitrumAdapter implements ChainAdapter {
     };
   }
 
+  public async getRpcHealth(): Promise<{ rpcConnected: boolean; chainId: number | null }> {
+    try {
+      const chainId = await this.client.getChainId();
+      return { rpcConnected: true, chainId };
+    } catch {
+      return { rpcConnected: false, chainId: null };
+    }
+  }
+
   public async verify(intent: PaymentIntent): Promise<VerificationResult> {
     if (intent.chainId !== ARBITRUM_CAIP2) {
       return {
