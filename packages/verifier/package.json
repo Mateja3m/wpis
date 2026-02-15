@@ -1,0 +1,34 @@
+{
+  "name": "@wpis/verifier",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "dev": "tsx watch src/index.ts",
+    "prebuild": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-optimism run build",
+    "pretest": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-optimism run build"
+  },
+  "dependencies": {
+    "@wpis/adapter-optimism": "0.1.0",
+    "@wpis/core": "0.1.0",
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^5.0.0",
+    "tsx": "^4.19.2"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}
