@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from "express";
 import { transitionStatus } from "@wpis/core";
-import { createOptimismAdapter } from "@wpis/adapter-optimism";
+import { createArbitrumAdapter } from "@wpis/adapter-arbitrum";
 import type { CreateIntentInput, PaymentStatus, VerificationResult } from "@wpis/core";
 import { VerifierDb } from "./db.js";
 
@@ -27,7 +27,7 @@ export function createVerifierServer(): VerifierServer {
   app.use(express.json());
 
   const db = new VerifierDb();
-  const adapter = createOptimismAdapter({
+  const adapter = createArbitrumAdapter({
     isReferenceUsed: (reference) => db.findByReference(reference) !== null
   });
 

@@ -17,7 +17,7 @@ import {
 } from "viem";
 import { optimism } from "viem/chains";
 
-const DEFAULT_CHAIN_ID = "eip155:10";
+const DEFAULT_CHAIN_ID = "eip155:42161";
 const DEFAULT_MIN_CONFIRMATIONS = 2;
 const DEFAULT_SCAN_BLOCKS = 500n;
 
@@ -55,7 +55,7 @@ export interface EvmClient {
   }): Promise<Erc20TransferLog[]>;
 }
 
-export interface OptimismAdapterOptions {
+export interface ArbitrumAdapterOptions {
   rpcUrl?: string;
   scanBlocks?: bigint;
   now?: () => Date;
@@ -122,14 +122,14 @@ function createDefaultClient(rpcUrl?: string): EvmClient {
   };
 }
 
-export class OptimismAdapter implements ChainAdapter {
+export class ArbitrumAdapter implements ChainAdapter {
   private readonly scanBlocks: bigint;
   private readonly now: () => Date;
   private readonly isReferenceUsed: (reference: string) => boolean;
   private readonly markReferenceUsed: (reference: string) => void;
   private readonly client: EvmClient;
 
-  public constructor(options: OptimismAdapterOptions = {}) {
+  public constructor(options: ArbitrumAdapterOptions = {}) {
     this.scanBlocks = options.scanBlocks ?? DEFAULT_SCAN_BLOCKS;
     this.now = options.now ?? (() => new Date());
 
@@ -279,6 +279,6 @@ export class OptimismAdapter implements ChainAdapter {
   }
 }
 
-export function createOptimismAdapter(options?: OptimismAdapterOptions): OptimismAdapter {
-  return new OptimismAdapter(options);
+export function createArbitrumAdapter(options?: ArbitrumAdapterOptions): ArbitrumAdapter {
+  return new ArbitrumAdapter(options);
 }

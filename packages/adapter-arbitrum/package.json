@@ -1,5 +1,5 @@
 {
-  "name": "@wpis/adapter-optimism",
+  "name": "/adapter-arbitrum",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",

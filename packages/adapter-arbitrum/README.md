@@ -3,7 +3,7 @@
 Optimism adapter implementation of the `ChainAdapter` interface.
 
 ## Behavior
-- `createIntent()`: validates input, defaults chain to `eip155:10`, defaults confirmations to `2`, enforces reference uniqueness via callback or in-memory set.
+- `createIntent()`: validates input, defaults chain to `eip155:42161`, defaults confirmations to `2`, enforces reference uniqueness via callback or in-memory set.
 - `buildRequest()`: builds EIP-681 links for native and ERC20 transfers.
 - `verify()`: checks intent expiration, scans recent blocks/logs through `viem`, returns `PENDING | DETECTED | CONFIRMED | EXPIRED`.
 

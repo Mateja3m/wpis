@@ -4,7 +4,7 @@ Minimal production-quality proof of concept for chain-agnostic payment intents a
 
 ## Scope
 - `@wpis/core`: canonical payment intent domain model, validation, state machine, expiration helpers.
-- `@wpis/adapter-optimism`: Optimism EVM adapter using `viem`.
+- `@wpis/adapter-arbitrum`: Optimism EVM adapter using `viem`.
 - `@wpis/verifier`: verification API + background poller with SQLite persistence.
 - `@wpis/react`: minimal reusable payment UI components.
 - `@wpis/demo-next`: Next.js demo app that creates intents and displays live status.
@@ -22,7 +22,7 @@ Minimal production-quality proof of concept for chain-agnostic payment intents a
 /wpis
   /packages
     /core
-    /adapter-optimism
+    /adapter-arbitrum
     /verifier
     /react
   /apps

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { PaymentIntent } from "@wpis/core";
-import { OptimismAdapter, type EvmClient, type EvmTransaction } from "../src/index.js";
+import { ArbitrumAdapter, type EvmClient, type EvmTransaction } from "../src/index.js";
 
 function createIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
   return {
     id: "intent-1",
     createdAt: "2025-01-01T00:00:00.000Z",
     expiresAt: "2099-01-01T00:00:00.000Z",
-    chainId: "eip155:10",
+    chainId: "eip155:42161",
     asset: { symbol: "ETH", decimals: 18, type: "native" },
     recipient: "0x1111111111111111111111111111111111111111",
     amount: "100",
@@ -54,9 +54,9 @@ class MockClient implements EvmClient {
   }
 }
 
-describe("OptimismAdapter", () => {
+describe("ArbitrumAdapter", () => {
   it("creates intents with defaults and unique references", () => {
-    const adapter = new OptimismAdapter({ client: new MockClient(100n, {}) });
+    const adapter = new ArbitrumAdapter({ client: new MockClient(100n, {}) });
 
     const intent = adapter.createIntent({
       asset: { symbol: "ETH", decimals: 18, type: "native" },
@@ -66,7 +66,7 @@ describe("OptimismAdapter", () => {
       expiresAt: "2099-01-01T00:00:00.000Z"
     });
 
-    expect(intent.chainId).toBe("eip155:10");
+    expect(intent.chainId).toBe("eip155:42161");
     expect(intent.confirmationPolicy.minConfirmations).toBe(2);
 
     expect(() =>
@@ -88,7 +88,7 @@ describe("OptimismAdapter", () => {
       blockNumber: 99n
     };
     const client = new MockClient(100n, { "100": [], "99": [tx] });
-    const adapter = new OptimismAdapter({ client, scanBlocks: 10n });
+    const adapter = new ArbitrumAdapter({ client, scanBlocks: 10n });
 
     const result = await adapter.verify(createIntent());
 
@@ -108,7 +108,7 @@ describe("OptimismAdapter", () => {
         }
       }
     ]);
-    const adapter = new OptimismAdapter({ client, scanBlocks: 10n });
+    const adapter = new ArbitrumAdapter({ client, scanBlocks: 10n });
 
     const result = await adapter.verify(
       createIntent({
@@ -128,7 +128,7 @@ describe("OptimismAdapter", () => {
   });
 
   it("returns expired when intent expiry has passed", async () => {
-    const adapter = new OptimismAdapter({
+    const adapter = new ArbitrumAdapter({
       client: new MockClient(100n, {}),
       now: () => new Date("2099-01-02T00:00:00.000Z")
     });

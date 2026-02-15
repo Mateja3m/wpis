@@ -11,11 +11,11 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "dev": "tsx watch src/index.ts",
-    "prebuild": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-optimism run build",
-    "pretest": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-optimism run build"
+    "prebuild": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-arbitrum run build",
+    "pretest": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-arbitrum run build"
   },
   "dependencies": {
-    "@wpis/adapter-optimism": "0.1.0",
+    "@wpis/adapter-arbitrum": "0.1.0",
     "@wpis/core": "0.1.0",
     "better-sqlite3": "^11.8.1",
     "express": "^4.21.2"
