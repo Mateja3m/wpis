@@ -41,7 +41,6 @@ interface CreatedIntentPayload {
 
 type BackendStatus = "checking" | "connected" | "disconnected";
 const REQUEST_TIMEOUT_MS = 8000;
-const VERIFY_TIMEOUT_MS = 30000;
 const usDateTimeFormatter = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
 
 async function fetchWithTimeout(input: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
@@ -108,13 +107,18 @@ export default function Page(): ReactElement {
       return;
     }
 
+    let cancelled = false;
+
     const poll = async (): Promise<void> => {
+      if (cancelled) {
+        return;
+      }
       if (verifyRequestInFlight.current) {
         return;
       }
       verifyRequestInFlight.current = true;
       try {
-        const response = await fetchWithTimeout(`${verifierUrl}/intents/${created.intent.id}/verify`, { method: "POST" }, VERIFY_TIMEOUT_MS);
+        const response = await fetchWithTimeout(`${verifierUrl}/intents/${created.intent.id}/verify`, { method: "POST" }, 0);
         if (!response.ok) {
           return;
         }
@@ -128,17 +132,18 @@ export default function Page(): ReactElement {
         setBackendStatus("disconnected");
       } finally {
         verifyRequestInFlight.current = false;
+        if (!cancelled) {
+          setTimeout(() => {
+            void poll();
+          }, 5000);
+        }
       }
     };
-
-    const handle = setInterval(() => {
-      void poll();
-    }, 5000);
 
     void poll();
 
     return () => {
-      clearInterval(handle);
+      cancelled = true;
     };
   }, [created?.intent.id, open]);
 
