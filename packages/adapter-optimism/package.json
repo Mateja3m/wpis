@@ -1,5 +1,5 @@
 {
-  "name": "@wpis/core",
+  "name": "@wpis/adapter-optimism",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -9,7 +9,13 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prebuild": "npm --workspace @wpis/core run build",
+    "pretest": "npm --workspace @wpis/core run build"
+  },
+  "dependencies": {
+    "@wpis/core": "0.1.0",
+    "viem": "^2.23.5"
   },
   "exports": {
     ".": {
