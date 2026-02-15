@@ -41,6 +41,7 @@ interface CreatedIntentPayload {
 type BackendStatus = "checking" | "connected" | "disconnected";
 const REQUEST_TIMEOUT_MS = 8000;
 const VERIFY_TIMEOUT_MS = 30000;
+const usDateTimeFormatter = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
 
 async function fetchWithTimeout(input: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
   if (timeoutMs <= 0) {
@@ -53,6 +54,14 @@ async function fetchWithTimeout(input: string, init?: RequestInit, timeoutMs = R
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function formatUsDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return usDateTimeFormatter.format(date);
 }
 
 export default function Page(): ReactElement {
@@ -276,7 +285,7 @@ export default function Page(): ReactElement {
                   State: <strong>{status ?? created.intent.status}</strong>
                 </Typography>
                 <Typography variant="body2">Confirmations: {confirmations ?? "N/A"}</Typography>
-                <Typography variant="body2">Expires at: {created.intent.expiresAt}</Typography>
+                <Typography variant="body2">Expires at: {formatUsDateTime(created.intent.expiresAt)}</Typography>
 
                 <Accordion disableGutters>
                   <AccordionSummary>
