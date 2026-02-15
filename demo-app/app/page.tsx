@@ -37,6 +37,8 @@ interface CreatedIntentPayload {
   };
 }
 
+type BackendStatus = "checking" | "connected" | "disconnected";
+
 export default function Page(): ReactElement {
   const [recipient, setRecipient] = useState("0x1111111111111111111111111111111111111111");
   const [assetType, setAssetType] = useState<AssetType>("native");
@@ -48,6 +50,7 @@ export default function Page(): ReactElement {
   const [status, setStatus] = useState<PaymentStatus | null>(null);
   const [confirmations, setConfirmations] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
 
   const intentInput = useMemo<CreateIntentInput>(() => {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
@@ -71,13 +74,17 @@ export default function Page(): ReactElement {
     }
 
     const poll = async (): Promise<void> => {
-      const response = await fetch(`${verifierUrl}/intents/${created.intent.id}/verify`, { method: "POST" });
-      if (!response.ok) {
-        return;
+      try {
+        const response = await fetch(`${verifierUrl}/intents/${created.intent.id}/verify`, { method: "POST" });
+        if (!response.ok) {
+          return;
+        }
+        const payload = (await response.json()) as { status: PaymentStatus; confirmations?: number };
+        setStatus(payload.status);
+        setConfirmations(payload.confirmations ?? null);
+      } catch {
+        setBackendStatus("disconnected");
       }
-      const payload = (await response.json()) as { status: PaymentStatus; confirmations?: number };
-      setStatus(payload.status);
-      setConfirmations(payload.confirmations ?? null);
     };
 
     const handle = setInterval(() => {
@@ -91,25 +98,51 @@ export default function Page(): ReactElement {
     };
   }, [created?.intent.id, open]);
 
+  useEffect(() => {
+    const checkBackend = async (): Promise<void> => {
+      try {
+        const response = await fetch(`${verifierUrl}/health`);
+        setBackendStatus(response.ok ? "connected" : "disconnected");
+      } catch {
+        setBackendStatus("disconnected");
+      }
+    };
+
+    void checkBackend();
+    const handle = setInterval(() => {
+      void checkBackend();
+    }, 10_000);
+
+    return () => {
+      clearInterval(handle);
+    };
+  }, []);
+
   const createIntent = async (): Promise<void> => {
     setError(null);
-    const response = await fetch(`${verifierUrl}/intents`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(intentInput)
-    });
+    try {
+      const response = await fetch(`${verifierUrl}/intents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(intentInput)
+      });
 
-    if (!response.ok) {
-      const payload = (await response.json()) as { error?: string };
-      setError(payload.error ?? "Failed to create intent");
-      return;
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        setError(payload.error ?? "Failed to create intent");
+        return;
+      }
+
+      const payload = (await response.json()) as CreatedIntentPayload;
+      setCreated(payload);
+      setStatus(payload.intent.status);
+      setConfirmations(null);
+      setOpen(true);
+      setBackendStatus("connected");
+    } catch {
+      setBackendStatus("disconnected");
+      setError("Verifier API is unreachable. Check that http://localhost:4000/health is online.");
     }
-
-    const payload = (await response.json()) as CreatedIntentPayload;
-    setCreated(payload);
-    setStatus(payload.intent.status);
-    setConfirmations(null);
-    setOpen(true);
   };
 
   return (
@@ -121,6 +154,14 @@ export default function Page(): ReactElement {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           WPIS Arbitrum One payment intent infrastructure primitive. This UI is for protocol/tooling validation, not checkout UX.
         </Typography>
+        <Alert severity={backendStatus === "connected" ? "success" : backendStatus === "checking" ? "info" : "warning"} sx={{ mb: 3 }}>
+          Verifier backend:{" "}
+          {backendStatus === "connected"
+            ? `Connected (${verifierUrl})`
+            : backendStatus === "checking"
+              ? `Checking (${verifierUrl}/health)`
+              : `Disconnected (${verifierUrl})`}
+        </Alert>
 
         <Stack spacing={2.5}>
           <TextField
