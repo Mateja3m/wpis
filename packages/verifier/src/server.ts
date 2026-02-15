@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from "express";
-import { transitionStatus } from "@wpis/core";
-import { createArbitrumAdapter } from "@wpis/adapter-arbitrum";
+import { canTransition, type WpisErrorCode } from "@wpis/core";
+import { ARBITRUM_ONE_CHAIN_ID, createArbitrumAdapter } from "@wpis/adapter-arbitrum";
 import type { CreateIntentInput, PaymentStatus, VerificationResult } from "@wpis/core";
 import { VerifierDb } from "./db.js";
 
@@ -19,16 +19,71 @@ function resolveNextStatus(current: PaymentStatus, verification: VerificationRes
   if (current === verification.status) {
     return current;
   }
-  return transitionStatus(current, verification.status);
+  if (!canTransition(current, verification.status)) {
+    return current;
+  }
+  return verification.status;
+}
+
+function structuredLog(type: string, payload: Record<string, unknown>): void {
+  const event = {
+    timestamp: new Date().toISOString(),
+    type,
+    ...payload
+  };
+  console.info(JSON.stringify(event));
+}
+
+function asErrorCode(error: unknown): WpisErrorCode | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+  if (!("code" in error)) {
+    return undefined;
+  }
+  const code = (error as { code?: string }).code;
+  if (
+    code === "VALIDATION_ERROR" ||
+    code === "RPC_ERROR" ||
+    code === "EXPIRED_ERROR" ||
+    code === "CONFIRMATION_PENDING" ||
+    code === "CHAIN_MISMATCH"
+  ) {
+    return code;
+  }
+  return undefined;
 }
 
 export function createVerifierServer(): VerifierServer {
   const app = express();
   app.use(express.json());
 
+  const scanBlocksValue = process.env.EVM_SCAN_BLOCKS ?? "500";
+  const scanBlocks = /^\d+$/.test(scanBlocksValue) ? BigInt(scanBlocksValue) : 500n;
   const db = new VerifierDb();
   const adapter = createArbitrumAdapter({
+    scanBlocks,
     isReferenceUsed: (reference) => db.findByReference(reference) !== null
+  });
+
+  app.get("/health", async (_request: Request, response: Response) => {
+    const dbStatus = db.ping();
+    const rpcHealth = await adapter.getRpcHealth();
+    const chainId = rpcHealth.chainId ?? ARBITRUM_ONE_CHAIN_ID;
+    const rpcConnected = rpcHealth.rpcConnected && chainId === ARBITRUM_ONE_CHAIN_ID;
+
+    const payload = {
+      ok: dbStatus && rpcConnected,
+      chainId,
+      rpcConnected,
+      dbStatus
+    };
+
+    if (payload.ok) {
+      response.json(payload);
+      return;
+    }
+    response.status(503).json(payload);
   });
 
   app.post("/intents", (request: Request, response: Response) => {
@@ -40,7 +95,7 @@ export function createVerifierServer(): VerifierServer {
       response.status(201).json({ intent, paymentRequest });
     } catch (error) {
       const message = error instanceof Error ? error.message : "invalid request";
-      response.status(400).json({ error: message });
+      response.status(400).json({ error: message, code: asErrorCode(error) });
     }
   });
 
@@ -66,11 +121,20 @@ export function createVerifierServer(): VerifierServer {
     try {
       const result = await adapter.verify(stored.intent);
       const nextStatus = resolveNextStatus(stored.status, result);
-      db.updateIntentStatus(stored.id, nextStatus, result);
+      const updated = db.updateIntentStatus(stored.id, nextStatus, result);
+      structuredLog("intent.verify", {
+        intentId: stored.id,
+        previousStatus: stored.status,
+        nextStatus,
+        updated,
+        txHash: result.txHash,
+        confirmations: result.confirmations ?? null,
+        errorCode: result.errorCode ?? null
+      });
       response.json({ ...result, status: nextStatus });
     } catch (error) {
       const message = error instanceof Error ? error.message : "verification failed";
-      response.status(500).json({ error: message });
+      response.status(500).json({ error: message, code: asErrorCode(error) });
     }
   });
 
@@ -80,11 +144,24 @@ export function createVerifierServer(): VerifierServer {
       try {
         const result = await adapter.verify(intent);
         const nextStatus = resolveNextStatus(intent.status, result);
-        if (nextStatus !== intent.status) {
-          db.updateIntentStatus(intent.id, nextStatus, result);
-        }
+        const updated = db.updateIntentStatus(intent.id, nextStatus, result);
+        structuredLog("intent.poll.verify", {
+          intentId: intent.id,
+          previousStatus: intent.status,
+          nextStatus,
+          updated,
+          txHash: result.txHash,
+          confirmations: result.confirmations ?? null,
+          errorCode: result.errorCode ?? null
+        });
       } catch {
-        db.updateIntentStatus(intent.id, "FAILED", { status: "FAILED", reason: "verifier exception" });
+        const updated = db.updateIntentStatus(intent.id, "FAILED", { status: "FAILED", reason: "verifier exception" });
+        structuredLog("intent.poll.verify_error", {
+          intentId: intent.id,
+          previousStatus: intent.status,
+          nextStatus: "FAILED",
+          updated
+        });
       }
     }
   }, 10_000);

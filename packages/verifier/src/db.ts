@@ -90,10 +90,14 @@ export class VerifierDb {
     return found ?? null;
   }
 
-  public updateIntentStatus(id: string, status: PaymentStatus, verification: VerificationResult): void {
+  public updateIntentStatus(id: string, status: PaymentStatus, verification: VerificationResult): boolean {
     const current = this.getIntent(id);
     if (!current) {
-      return;
+      return false;
+    }
+
+    if (current.status === status) {
+      return false;
     }
 
     const updatedIntent: PaymentIntent = {
@@ -113,6 +117,7 @@ export class VerifierDb {
       });
 
     this.addEvent(id, "INTENT_VERIFIED", verification);
+    return true;
   }
 
   private addEvent(intentId: string, type: string, payload: Record<string, unknown> | VerificationResult): void {
@@ -131,5 +136,10 @@ export class VerifierDb {
 
   public close(): void {
     this.db.close();
+  }
+
+  public ping(): boolean {
+    const row = this.db.prepare("SELECT 1 as ok").get() as { ok: number };
+    return row.ok === 1;
   }
 }
