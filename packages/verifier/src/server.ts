@@ -85,8 +85,8 @@ export function createVerifierServer(): VerifierServer {
   );
   app.use(express.json());
 
-  const scanBlocksValue = process.env.EVM_SCAN_BLOCKS ?? "500";
-  const scanBlocks = /^\d+$/.test(scanBlocksValue) ? BigInt(scanBlocksValue) : 500n;
+  const scanBlocksValue = process.env.EVM_SCAN_BLOCKS ?? "150";
+  const scanBlocks = /^\d+$/.test(scanBlocksValue) ? BigInt(scanBlocksValue) : 150n;
   const db = new VerifierDb();
   const adapter = createArbitrumAdapter({
     expectedChainId,
