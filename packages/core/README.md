@@ -18,6 +18,7 @@ State regression is disallowed by transition rules.
 - Deterministic status transitions (`transitionStatus` enforces legal edges only).
 - Explicit expiration checks (`isIntentExpired` / `isExpired`).
 - Validation-first intent creation guards malformed input.
+- Unit test coverage target for this package is 85%+.
 - Error taxonomy is explicit and typed:
   - `VALIDATION_ERROR`
   - `RPC_ERROR`

@@ -1,25 +1,41 @@
-# WPIS - Web3 Payment Infrastructure Standard (PoC)
+# WPIS - Web3 Payment Infrastructure Standard (Arbitrum One PoC)
 
-Minimal production-quality proof of concept for chain-agnostic payment intents and verification.
+Infrastructure-only developer tooling primitive for deterministic payment intent verification on Arbitrum One.
 
-## Scope
-- `@wpis/core`: canonical payment intent domain model, validation, state machine, expiration helpers.
-- `@wpis/adapter-arbitrum`: Optimism EVM adapter using `viem`.
-- `@wpis/verifier`: verification API + background poller with SQLite persistence.
-- `@wpis/react`: minimal reusable payment UI components.
-- `@wpis/demo-next`: Next.js demo app that creates intents and displays live status.
+## Why This Is Dev Tooling
+- Provides a reusable SDK + verifier pattern for protocol teams, indexers, relayers, and app developers.
+- Focuses on deterministic state transitions and verification correctness, not merchant UX.
+- Runs as self-hosted infrastructure in developer-controlled environments.
 
-## Architecture
-1. Client creates an intent through verifier `POST /intents`.
-2. Verifier calls `OptimismAdapter.createIntent()` and stores the intent JSON in SQLite.
-3. Verifier returns `paymentRequest` (EIP-681 link + instructions).
-4. Client displays QR/instructions and polls `GET /intents/:id`.
-5. Verifier validates on-demand (`POST /intents/:id/verify`) and in background every 10s.
-6. Status updates follow strict transitions (`PENDING -> DETECTED -> CONFIRMED`, with terminal `EXPIRED/FAILED`).
+## Arbitrum Ecosystem Benefit
+- Standardizes intent verification semantics for Arbitrum One (`42161`).
+- Reduces duplicated verification logic across ecosystem projects.
+- Improves reliability of off-chain tooling that depends on on-chain payment detection.
 
-## Monorepo
-```
-/wpis
+## Scope (PoC)
+- `@wpis/core`: intent model, validation, typed error taxonomy, lifecycle state machine.
+- `@wpis/adapter-arbitrum`: Arbitrum One adapter using `viem`.
+- `@wpis/verifier`: SQLite-backed verification API with polling + health endpoint.
+- `@wpis/react`: minimal reusable payment UI primitives.
+- `@wpis/demo-next`: MUI developer playground reference app.
+
+## What This Does Not Solve
+- Not a payment provider.
+- Not a checkout product.
+- No wallet integration.
+- No custody or key management.
+- No swaps, fiat rails, hosted merchant features, or multi-chain routing.
+
+## Architecture Summary
+1. `POST /intents` creates a deterministic `PaymentIntent` via Arbitrum adapter.
+2. Intent JSON and lifecycle state are persisted in SQLite.
+3. Verification (`POST /intents/:id/verify` and poller) applies strict state transition guards.
+4. Health endpoint (`GET /health`) reports RPC connectivity, chain id, and DB availability.
+5. Demo playground consumes verifier APIs for development/testing.
+
+## Monorepo Structure
+```text
+/Users/milanmatejic/Desktop/personal/Projects/wpis
   /packages
     /core
     /adapter-arbitrum
@@ -30,12 +46,17 @@ Minimal production-quality proof of concept for chain-agnostic payment intents a
 ```
 
 ## Environment
-Copy `.env.example` values:
-- `EVM_RPC_URL`: Optimism RPC endpoint used by verifier.
-- `PORT`: verifier HTTP port (default `4000`).
-- `NEXT_PUBLIC_VERIFIER_URL`: demo app backend URL.
+```bash
+cp .env.example .env
+```
 
-## Local Run
+Variables:
+- `EVM_RPC_URL`: Arbitrum One RPC URL.
+- `EVM_SCAN_BLOCKS`: verification scan depth window.
+- `PORT`: verifier HTTP port.
+- `NEXT_PUBLIC_VERIFIER_URL`: frontend target verifier URL.
+
+## Run
 ```bash
 npm install
 npm run build
@@ -44,21 +65,22 @@ npm run dev
 ```
 
 - Verifier: `http://localhost:4000`
-- Demo app: `http://localhost:3000`
+- Playground: `http://localhost:3000`
 
 ## API
-- `POST /intents` -> creates intent and returns `{ intent, paymentRequest }`
-- `GET /intents/:id` -> returns current `{ intent, status }`
-- `POST /intents/:id/verify` -> runs verification and updates state
+- `GET /health`
+- `POST /intents`
+- `GET /intents/:id`
+- `POST /intents/:id/verify`
 
-## Non-custodial Guarantees
-- No private key handling.
-- No signing or custody logic.
-- Verification relies only on public chain data.
+## Known Limitations (PoC)
+- Recipient + amount + scan-window mapping only.
+- Scan bounded by `EVM_SCAN_BLOCKS`; older matches outside window are ignored.
+- Native transfer matching cannot cryptographically bind off-chain reference to on-chain transaction.
+- Single-service deployment assumptions (no distributed coordination).
 
-## Known limitations (PoC)
-- Verification scans only recent blocks (`scanBlocks`) and can miss older transactions.
-- Native transfer matching is recipient/value based only (no sender/reference binding on-chain).
-- ERC20 verification checks `Transfer` events only and does not decode non-standard token behavior.
-- Reference uniqueness is enforced at application layer, not by dedicated DB index over JSON field.
-- Single verifier instance assumptions (no distributed locking).
+## Phase 2 Roadmap (Out of Scope for This PoC)
+- Multi-chain adapter registry with conformance tests.
+- Advanced mapping strategies (memo/reference anchoring, stronger correlation signals).
+- Horizontal verifier coordination and durable queue-based polling.
+- Expanded observability and SLO instrumentation.
