@@ -10,7 +10,7 @@ import {
   type VerificationResult
 } from "@wpis/core";
 import { createPublicClient, http, parseAbiItem, type Address, type Hash } from "viem";
-import { arbitrum } from "viem/chains";
+import { arbitrum, arbitrumSepolia } from "viem/chains";
 
 const ARBITRUM_CHAIN_ID = 42161;
 const ARBITRUM_CAIP2 = `eip155:${ARBITRUM_CHAIN_ID}`;
@@ -70,14 +70,25 @@ function toBigInt(amount: string): bigint {
   return BigInt(amount);
 }
 
-function createDefaultClient(rpcUrl?: string): EvmClient {
+function resolveChain(expectedChainId: number): typeof arbitrum | typeof arbitrumSepolia {
+  if (expectedChainId === 42161) {
+    return arbitrum;
+  }
+  if (expectedChainId === 421614) {
+    return arbitrumSepolia;
+  }
+  throw new WpisError("VALIDATION_ERROR", `unsupported arbitrum chain id: ${expectedChainId}`);
+}
+
+function createDefaultClient(rpcUrl: string | undefined, expectedChainId: number): EvmClient {
   const resolvedUrl = rpcUrl ?? process.env.EVM_RPC_URL;
   if (!resolvedUrl) {
     throw new WpisError("RPC_ERROR", "EVM_RPC_URL is required for verification");
   }
 
+  const chain = resolveChain(expectedChainId);
   const client = createPublicClient({
-    chain: arbitrum,
+    chain,
     transport: http(resolvedUrl)
   });
 
@@ -144,7 +155,7 @@ export class ArbitrumAdapter implements ChainAdapter {
         seenReferences.add(reference);
       });
 
-    this.client = options.client ?? createDefaultClient(options.rpcUrl);
+    this.client = options.client ?? createDefaultClient(options.rpcUrl, this.expectedChainId);
   }
 
   public createIntent(input: CreateIntentInput): PaymentIntent {
