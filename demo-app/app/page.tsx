@@ -25,6 +25,7 @@ import type { CreateIntentInput, PaymentIntent, PaymentStatus } from "@wpis/core
 import { QRCodeSVG } from "qrcode.react";
 
 const verifierUrl = process.env.NEXT_PUBLIC_VERIFIER_URL ?? "http://localhost:4000";
+const simulationEnabled = process.env.NEXT_PUBLIC_ENABLE_SIMULATION === "true";
 
 type AssetType = "native" | "erc20";
 
@@ -64,6 +65,13 @@ function formatUsDateTime(iso: string): string {
   return usDateTimeFormatter.format(date);
 }
 
+function generateReference(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `dev-playground-${crypto.randomUUID()}`;
+  }
+  return `dev-playground-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+}
+
 export default function Page(): ReactElement {
   const [recipient, setRecipient] = useState("0x1111111111111111111111111111111111111111");
   const [assetType, setAssetType] = useState<AssetType>("native");
@@ -77,6 +85,7 @@ export default function Page(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
   const [creating, setCreating] = useState(false);
+  const [simulating, setSimulating] = useState(false);
   const verifyRequestInFlight = useRef(false);
 
   const intentInput = useMemo<CreateIntentInput>(() => {
@@ -84,7 +93,7 @@ export default function Page(): ReactElement {
     return {
       recipient,
       amount,
-      reference: `dev-playground-${Date.now()}`,
+      reference: "dev-playground-placeholder",
       expiresAt,
       chainId: "eip155:42161",
       asset:
@@ -161,7 +170,10 @@ export default function Page(): ReactElement {
       const response = await fetchWithTimeout(`${verifierUrl}/intents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(intentInput)
+        body: JSON.stringify({
+          ...intentInput,
+          reference: generateReference()
+        })
       });
 
       if (!response.ok) {
@@ -181,6 +193,31 @@ export default function Page(): ReactElement {
       setError("Verifier API is unreachable. Check that http://localhost:4000/health is online.");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const simulateStatus = async (targetStatus: PaymentStatus): Promise<void> => {
+    if (!created?.intent.id) {
+      return;
+    }
+    setError(null);
+    setSimulating(true);
+    try {
+      const response = await fetchWithTimeout(`${verifierUrl}/intents/${created.intent.id}/simulate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: targetStatus })
+      });
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        setError(payload.error ?? "Failed to simulate status");
+        return;
+      }
+      setStatus(targetStatus);
+    } catch {
+      setError("Simulation request failed. Check backend connectivity.");
+    } finally {
+      setSimulating(false);
     }
   };
 
@@ -286,6 +323,43 @@ export default function Page(): ReactElement {
                 </Typography>
                 <Typography variant="body2">Confirmations: {confirmations ?? "N/A"}</Typography>
                 <Typography variant="body2">Expires at: {formatUsDateTime(created.intent.expiresAt)}</Typography>
+
+                {simulationEnabled ? (
+                  <Box
+                    sx={{
+                      p: 1.5,
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 1.5,
+                      background: "#f9fafb"
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                      Dev simulation
+                    </Typography>
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={simulating}
+                        onClick={() => {
+                          void simulateStatus("DETECTED");
+                        }}
+                      >
+                        Mark DETECTED
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={simulating}
+                        onClick={() => {
+                          void simulateStatus("CONFIRMED");
+                        }}
+                      >
+                        Mark CONFIRMED
+                      </Button>
+                    </Stack>
+                  </Box>
+                ) : null}
 
                 <Accordion disableGutters>
                   <AccordionSummary>

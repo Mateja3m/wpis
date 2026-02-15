@@ -57,6 +57,7 @@ function asErrorCode(error: unknown): WpisErrorCode | undefined {
 
 export function createVerifierServer(): VerifierServer {
   const app = express();
+  const simulationEnabled = process.env.ENABLE_INTENT_SIMULATION === "true";
   const allowedOrigins = new Set<string>(["http://localhost:3000", "http://127.0.0.1:3000"]);
   const frontendOrigin = process.env.FRONTEND_ORIGIN;
   if (frontendOrigin) {
@@ -160,6 +161,48 @@ export function createVerifierServer(): VerifierServer {
       const message = error instanceof Error ? error.message : "verification failed";
       response.status(500).json({ error: message, code: asErrorCode(error) });
     }
+  });
+
+  app.post("/intents/:id/simulate", (request: Request, response: Response) => {
+    if (!simulationEnabled) {
+      response.status(403).json({ error: "simulation is disabled" });
+      return;
+    }
+
+    const id = typeof request.params.id === "string" ? request.params.id : "";
+    const stored = db.getIntent(id);
+    if (!stored) {
+      response.status(404).json({ error: "intent not found" });
+      return;
+    }
+
+    const requestedStatus = (request.body as { status?: PaymentStatus }).status;
+    if (!requestedStatus) {
+      response.status(400).json({ error: "status is required" });
+      return;
+    }
+    if (terminalStatuses.includes(stored.status)) {
+      response.status(400).json({ error: `intent already in terminal state: ${stored.status}` });
+      return;
+    }
+    if (!canTransition(stored.status, requestedStatus) && stored.status !== requestedStatus) {
+      response.status(400).json({ error: `cannot simulate transition ${stored.status} -> ${requestedStatus}` });
+      return;
+    }
+
+    const result: VerificationResult = {
+      status: requestedStatus,
+      reason: "simulated status transition"
+    };
+    const updated = db.updateIntentStatus(stored.id, requestedStatus, result);
+    structuredLog("intent.simulate", {
+      intentId: stored.id,
+      previousStatus: stored.status,
+      nextStatus: requestedStatus,
+      updated
+    });
+
+    response.json({ status: requestedStatus, updated });
   });
 
   const intervalHandle = setInterval(async () => {
