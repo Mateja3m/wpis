@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import {
   Accordion,
   AccordionDetails,
@@ -8,6 +8,7 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -39,10 +40,14 @@ interface CreatedIntentPayload {
 
 type BackendStatus = "checking" | "connected" | "disconnected";
 const REQUEST_TIMEOUT_MS = 8000;
+const VERIFY_TIMEOUT_MS = 30000;
 
-async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
+async function fetchWithTimeout(input: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
+  if (timeoutMs <= 0) {
+    return fetch(input, init);
+  }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } finally {
@@ -63,6 +68,7 @@ export default function Page(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
   const [creating, setCreating] = useState(false);
+  const verifyRequestInFlight = useRef(false);
 
   const intentInput = useMemo<CreateIntentInput>(() => {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
@@ -86,16 +92,25 @@ export default function Page(): ReactElement {
     }
 
     const poll = async (): Promise<void> => {
+      if (verifyRequestInFlight.current) {
+        return;
+      }
+      verifyRequestInFlight.current = true;
       try {
-        const response = await fetchWithTimeout(`${verifierUrl}/intents/${created.intent.id}/verify`, { method: "POST" });
+        const response = await fetchWithTimeout(`${verifierUrl}/intents/${created.intent.id}/verify`, { method: "POST" }, VERIFY_TIMEOUT_MS);
         if (!response.ok) {
           return;
         }
         const payload = (await response.json()) as { status: PaymentStatus; confirmations?: number };
         setStatus(payload.status);
         setConfirmations(payload.confirmations ?? null);
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
         setBackendStatus("disconnected");
+      } finally {
+        verifyRequestInFlight.current = false;
       }
     };
 
@@ -113,7 +128,7 @@ export default function Page(): ReactElement {
   useEffect(() => {
     const checkBackend = async (): Promise<void> => {
       try {
-        await fetchWithTimeout(`${verifierUrl}/health`);
+        await fetchWithTimeout(`${verifierUrl}/health`, { cache: "no-store" });
         setBackendStatus("connected");
       } catch {
         setBackendStatus("disconnected");
@@ -218,8 +233,29 @@ export default function Page(): ReactElement {
             size="small"
           />
 
-          <Button variant="contained" onClick={() => void createIntent()} disabled={creating}>
-            {creating ? "Creating..." : "Create Intent"}
+          <Button
+            variant="contained"
+            onClick={() => void createIntent()}
+            disabled={creating}
+            disableElevation
+            sx={{
+              textTransform: "none",
+              borderRadius: 1.5,
+              py: 1.25,
+              fontWeight: 600,
+              letterSpacing: 0.2,
+              backgroundColor: "#1f2937",
+              "&:hover": { backgroundColor: "#111827" },
+              "&.Mui-disabled": {
+                backgroundColor: "#d1d5db",
+                color: "#374151"
+              }
+            }}
+          >
+            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+              {creating ? <CircularProgress size={16} color="inherit" /> : null}
+              {creating ? "Creating intent..." : "Create intent"}
+            </Box>
           </Button>
 
           {error ? <Alert severity="error">{error}</Alert> : null}
