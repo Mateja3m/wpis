@@ -81,6 +81,7 @@ export default function Page(): ReactElement {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<PaymentStatus | null>(null);
   const [confirmations, setConfirmations] = useState<number | null>(null);
+  const [verificationReason, setVerificationReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
   const [creating, setCreating] = useState(false);
@@ -122,9 +123,10 @@ export default function Page(): ReactElement {
         if (!response.ok) {
           return;
         }
-        const payload = (await response.json()) as { status: PaymentStatus; confirmations?: number };
+        const payload = (await response.json()) as { status: PaymentStatus; confirmations?: number; reason?: string };
         setStatus(payload.status);
         setConfirmations(payload.confirmations ?? null);
+        setVerificationReason(payload.reason ?? null);
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           return;
@@ -190,6 +192,7 @@ export default function Page(): ReactElement {
       setCreated(payload);
       setStatus(payload.intent.status);
       setConfirmations(null);
+      setVerificationReason(null);
       setOpen(true);
       setBackendStatus("connected");
     } catch {
@@ -301,6 +304,7 @@ export default function Page(): ReactElement {
                   State: <strong>{status ?? created.intent.status}</strong>
                 </Typography>
                 <Typography variant="body2">Confirmations: {confirmations ?? "N/A"}</Typography>
+                {verificationReason ? <Typography variant="body2">Reason: {verificationReason}</Typography> : null}
                 <Typography variant="body2">Expires at: {formatUsDateTime(created.intent.expiresAt)}</Typography>
 
                 <Accordion disableGutters>
