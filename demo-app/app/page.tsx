@@ -38,6 +38,17 @@ interface CreatedIntentPayload {
 }
 
 type BackendStatus = "checking" | "connected" | "disconnected";
+const REQUEST_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export default function Page(): ReactElement {
   const [recipient, setRecipient] = useState("0x1111111111111111111111111111111111111111");
@@ -51,6 +62,7 @@ export default function Page(): ReactElement {
   const [confirmations, setConfirmations] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
+  const [creating, setCreating] = useState(false);
 
   const intentInput = useMemo<CreateIntentInput>(() => {
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
@@ -75,7 +87,7 @@ export default function Page(): ReactElement {
 
     const poll = async (): Promise<void> => {
       try {
-        const response = await fetch(`${verifierUrl}/intents/${created.intent.id}/verify`, { method: "POST" });
+        const response = await fetchWithTimeout(`${verifierUrl}/intents/${created.intent.id}/verify`, { method: "POST" });
         if (!response.ok) {
           return;
         }
@@ -101,7 +113,7 @@ export default function Page(): ReactElement {
   useEffect(() => {
     const checkBackend = async (): Promise<void> => {
       try {
-        await fetch(`${verifierUrl}/health`);
+        await fetchWithTimeout(`${verifierUrl}/health`);
         setBackendStatus("connected");
       } catch {
         setBackendStatus("disconnected");
@@ -119,9 +131,10 @@ export default function Page(): ReactElement {
   }, []);
 
   const createIntent = async (): Promise<void> => {
+    setCreating(true);
     setError(null);
     try {
-      const response = await fetch(`${verifierUrl}/intents`, {
+      const response = await fetchWithTimeout(`${verifierUrl}/intents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(intentInput)
@@ -142,6 +155,8 @@ export default function Page(): ReactElement {
     } catch {
       setBackendStatus("disconnected");
       setError("Verifier API is unreachable. Check that http://localhost:4000/health is online.");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -203,8 +218,8 @@ export default function Page(): ReactElement {
             size="small"
           />
 
-          <Button variant="contained" onClick={() => void createIntent()}>
-            Create Intent
+          <Button variant="contained" onClick={() => void createIntent()} disabled={creating}>
+            {creating ? "Creating..." : "Create Intent"}
           </Button>
 
           {error ? <Alert severity="error">{error}</Alert> : null}
