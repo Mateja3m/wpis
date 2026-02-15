@@ -10,8 +10,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run -ws build",
-    "test": "npm run -ws test",
+    "build": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-optimism run build && npm --workspace @wpis/verifier run build && npm --workspace @wpis/react run build && npm --workspace @wpis/demo-next run build",
+    "test": "npm --workspace @wpis/core run test && npm --workspace @wpis/adapter-optimism run test && npm --workspace @wpis/verifier run test && npm --workspace @wpis/react run test && npm --workspace @wpis/demo-next run test",
     "dev": "concurrently -n verifier,demo -c blue,green \"npm --workspace @wpis/verifier run dev\" \"npm --workspace @wpis/demo-next run dev\""
   },
   "devDependencies": {
