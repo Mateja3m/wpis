@@ -128,7 +128,16 @@ export default function Page(): ReactElement {
         if (!response.ok) {
           return;
         }
-        const payload = (await response.json()) as { status: PaymentStatus };
+        const payload = (await response.json()) as { intent: PaymentIntent; status: PaymentStatus };
+        setCreated((previous) => {
+          if (!previous) {
+            return previous;
+          }
+          return {
+            ...previous,
+            intent: payload.intent
+          };
+        });
         setStatus(payload.status);
         setVerificationReason(statusReason(payload.status));
       } catch (error) {
