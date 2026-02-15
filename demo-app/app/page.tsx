@@ -101,8 +101,8 @@ export default function Page(): ReactElement {
   useEffect(() => {
     const checkBackend = async (): Promise<void> => {
       try {
-        const response = await fetch(`${verifierUrl}/health`);
-        setBackendStatus(response.ok ? "connected" : "disconnected");
+        await fetch(`${verifierUrl}/health`);
+        setBackendStatus("connected");
       } catch {
         setBackendStatus("disconnected");
       }

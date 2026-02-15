@@ -1,4 +1,5 @@
 import express, { type Request, type Response } from "express";
+import cors from "cors";
 import { canTransition, type WpisErrorCode } from "@wpis/core";
 import { ARBITRUM_ONE_CHAIN_ID, createArbitrumAdapter } from "@wpis/adapter-arbitrum";
 import type { CreateIntentInput, PaymentStatus, VerificationResult } from "@wpis/core";
@@ -56,6 +57,24 @@ function asErrorCode(error: unknown): WpisErrorCode | undefined {
 
 export function createVerifierServer(): VerifierServer {
   const app = express();
+  const allowedOrigin = (() => {
+    const raw = process.env.NEXT_PUBLIC_VERIFIER_URL;
+    if (!raw) {
+      return "http://localhost:3000";
+    }
+    try {
+      return new URL(raw).origin;
+    } catch {
+      return "http://localhost:3000";
+    }
+  })();
+  app.use(
+    cors({
+      origin: [allowedOrigin, "http://localhost:3000"],
+      methods: ["GET", "POST", "OPTIONS"],
+      credentials: false
+    })
+  );
   app.use(express.json());
 
   const scanBlocksValue = process.env.EVM_SCAN_BLOCKS ?? "500";
