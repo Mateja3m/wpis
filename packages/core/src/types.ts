@@ -48,6 +48,7 @@ export interface VerificationResult {
   txHash?: string;
   confirmations?: number;
   reason?: string;
+  errorCode?: import("./errors.js").WpisErrorCode;
 }
 
 export interface ChainAdapter {

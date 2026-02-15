@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canTransition,
   isExpired,
+  isWpisError,
   transitionStatus,
   validateCreateIntentInput
 } from "../src/index.js";
@@ -30,6 +31,30 @@ describe("validateCreateIntentInput", () => {
       })
     ).toThrow(/recipient/);
   });
+
+  it("fails when erc20 contract is missing", () => {
+    expect(() =>
+      validateCreateIntentInput({
+        asset: { symbol: "USDC", decimals: 6, type: "erc20" },
+        recipient: "0x1111111111111111111111111111111111111111",
+        amount: "1",
+        reference: "order-3",
+        expiresAt: new Date(Date.now() + 60_000).toISOString()
+      })
+    ).toThrow(/contractAddress/);
+  });
+
+  it("fails when amount is not positive integer string", () => {
+    expect(() =>
+      validateCreateIntentInput({
+        asset: { symbol: "ETH", decimals: 18, type: "native" },
+        recipient: "0x1111111111111111111111111111111111111111",
+        amount: "0",
+        reference: "order-4",
+        expiresAt: new Date(Date.now() + 60_000).toISOString()
+      })
+    ).toThrow(/amount/);
+  });
 });
 
 describe("expiration", () => {
@@ -48,5 +73,23 @@ describe("state transitions", () => {
   it("rejects confirmed -> pending", () => {
     expect(canTransition("CONFIRMED", "PENDING")).toBe(false);
     expect(() => transitionStatus("CONFIRMED", "PENDING")).toThrow(/invalid status transition/);
+  });
+
+  it("throws typed WpisError for invalid transition", () => {
+    try {
+      transitionStatus("EXPIRED", "CONFIRMED");
+      throw new Error("expected transition to fail");
+    } catch (error) {
+      expect(isWpisError(error)).toBe(true);
+      if (isWpisError(error)) {
+        expect(error.code).toBe("VALIDATION_ERROR");
+      }
+    }
+  });
+
+  it("enforces deterministic progression", () => {
+    expect(canTransition("PENDING", "CONFIRMED")).toBe(true);
+    expect(canTransition("DETECTED", "PENDING")).toBe(false);
+    expect(canTransition("FAILED", "DETECTED")).toBe(false);
   });
 });

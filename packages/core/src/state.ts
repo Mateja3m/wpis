@@ -1,3 +1,4 @@
+import { WpisError } from "./errors.js";
 import type { PaymentStatus } from "./types.js";
 
 const allowedTransitions: Record<PaymentStatus, PaymentStatus[]> = {
@@ -14,7 +15,7 @@ export function canTransition(from: PaymentStatus, to: PaymentStatus): boolean {
 
 export function transitionStatus(from: PaymentStatus, to: PaymentStatus): PaymentStatus {
   if (!canTransition(from, to)) {
-    throw new Error(`invalid status transition: ${from} -> ${to}`);
+    throw new WpisError("VALIDATION_ERROR", `invalid status transition: ${from} -> ${to}`);
   }
   return to;
 }
