@@ -93,6 +93,47 @@ export function createVerifierServer(): VerifierServer {
     scanBlocks,
     isReferenceUsed: (reference) => db.findByReference(reference) !== null
   });
+  const verificationLocks = new Map<string, Promise<VerificationResult>>();
+
+  const verifyIntent = async (intentId: string, logType: "intent.verify" | "intent.poll.verify"): Promise<VerificationResult> => {
+    const running = verificationLocks.get(intentId);
+    if (running) {
+      return running;
+    }
+
+    const task = (async (): Promise<VerificationResult> => {
+      const beforeVerify = db.getIntent(intentId);
+      if (!beforeVerify) {
+        return { status: "FAILED", reason: "intent not found" };
+      }
+
+      const result = await adapter.verify(beforeVerify.intent);
+      const current = db.getIntent(intentId);
+      if (!current) {
+        return { status: "FAILED", reason: "intent not found" };
+      }
+
+      const nextStatus = resolveNextStatus(current.status, result);
+      const updated = db.updateIntentStatus(current.id, nextStatus, result);
+      structuredLog(logType, {
+        intentId: current.id,
+        previousStatus: current.status,
+        nextStatus,
+        updated,
+        txHash: result.txHash,
+        confirmations: result.confirmations ?? null,
+        errorCode: result.errorCode ?? null
+      });
+      return { ...result, status: nextStatus };
+    })();
+
+    verificationLocks.set(intentId, task);
+    try {
+      return await task;
+    } finally {
+      verificationLocks.delete(intentId);
+    }
+  };
 
   app.get("/health", async (_request: Request, response: Response) => {
     const dbStatus = db.ping();
@@ -147,19 +188,8 @@ export function createVerifierServer(): VerifierServer {
     }
 
     try {
-      const result = await adapter.verify(stored.intent);
-      const nextStatus = resolveNextStatus(stored.status, result);
-      const updated = db.updateIntentStatus(stored.id, nextStatus, result);
-      structuredLog("intent.verify", {
-        intentId: stored.id,
-        previousStatus: stored.status,
-        nextStatus,
-        updated,
-        txHash: result.txHash,
-        confirmations: result.confirmations ?? null,
-        errorCode: result.errorCode ?? null
-      });
-      response.json({ ...result, status: nextStatus });
+      const result = await verifyIntent(stored.id, "intent.verify");
+      response.json(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : "verification failed";
       response.status(500).json({ error: message, code: asErrorCode(error) });
@@ -170,18 +200,7 @@ export function createVerifierServer(): VerifierServer {
     const intents = db.listPendingIntents();
     for (const intent of intents) {
       try {
-        const result = await adapter.verify(intent);
-        const nextStatus = resolveNextStatus(intent.status, result);
-        const updated = db.updateIntentStatus(intent.id, nextStatus, result);
-        structuredLog("intent.poll.verify", {
-          intentId: intent.id,
-          previousStatus: intent.status,
-          nextStatus,
-          updated,
-          txHash: result.txHash,
-          confirmations: result.confirmations ?? null,
-          errorCode: result.errorCode ?? null
-        });
+        await verifyIntent(intent.id, "intent.poll.verify");
       } catch {
         const updated = db.updateIntentStatus(intent.id, "FAILED", { status: "FAILED", reason: "verifier exception" });
         structuredLog("intent.poll.verify_error", {

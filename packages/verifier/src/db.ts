@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import type { PaymentIntent, PaymentStatus, VerificationResult } from "@wpis/core";
+import { canTransition, type PaymentIntent, type PaymentStatus, type VerificationResult } from "@wpis/core";
 
 export interface StoredIntent {
   id: string;
@@ -97,6 +97,9 @@ export class VerifierDb {
     }
 
     if (current.status === status) {
+      return false;
+    }
+    if (!canTransition(current.status, status)) {
       return false;
     }
 
