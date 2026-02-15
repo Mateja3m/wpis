@@ -57,20 +57,25 @@ function asErrorCode(error: unknown): WpisErrorCode | undefined {
 
 export function createVerifierServer(): VerifierServer {
   const app = express();
-  const allowedOrigin = (() => {
-    const raw = process.env.NEXT_PUBLIC_VERIFIER_URL;
-    if (!raw) {
-      return "http://localhost:3000";
-    }
-    try {
-      return new URL(raw).origin;
-    } catch {
-      return "http://localhost:3000";
-    }
-  })();
+  const allowedOrigins = new Set<string>(["http://localhost:3000", "http://127.0.0.1:3000"]);
+  const frontendOrigin = process.env.FRONTEND_ORIGIN;
+  if (frontendOrigin) {
+    allowedOrigins.add(frontendOrigin);
+  }
+
   app.use(
     cors({
-      origin: [allowedOrigin, "http://localhost:3000"],
+      origin: (origin, callback) => {
+        if (!origin) {
+          callback(null, true);
+          return;
+        }
+        if (allowedOrigins.has(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error(`CORS blocked for origin: ${origin}`));
+      },
       methods: ["GET", "POST", "OPTIONS"],
       credentials: false
     })
