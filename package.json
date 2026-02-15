@@ -1,0 +1,23 @@
+{
+  "name": "wpis",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run -ws build",
+    "test": "npm run -ws test",
+    "dev": "concurrently -n verifier,demo -c blue,green \"npm --workspace @wpis/verifier run dev\" \"npm --workspace @wpis/demo-next run dev\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
