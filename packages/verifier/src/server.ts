@@ -174,6 +174,7 @@ export function createVerifierServer(): VerifierServer {
       const port = Number(process.env.PORT ?? 4000);
       await new Promise<void>((resolve) => {
         server = app.listen(port, () => {
+          console.info(`[verifier] listening on http://localhost:${port}`);
           resolve();
         });
       });

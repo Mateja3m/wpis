@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "dev": "tsx watch src/index.ts",
+    "dev": "node --env-file-if-exists=../../.env --import tsx src/index.ts",
+    "dev:watch": "node --env-file-if-exists=../../.env --import tsx --watch src/index.ts",
     "prebuild": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-arbitrum run build",
     "pretest": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-arbitrum run build"
   },

@@ -12,7 +12,8 @@
   "scripts": {
     "build": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-arbitrum run build && npm --workspace @wpis/verifier run build && npm --workspace @wpis/react run build && npm --workspace @wpis/demo run build",
     "test": "npm --workspace @wpis/core run test && npm --workspace @wpis/adapter-arbitrum run test && npm --workspace @wpis/verifier run test && npm --workspace @wpis/react run test && npm --workspace @wpis/demo run test",
-    "dev": "concurrently -n verifier,demo -c blue,green \"npm --workspace @wpis/verifier run dev\" \"npm --workspace @wpis/demo run dev\""
+    "dev": "sh -c 'set -a; if [ -f .env ]; then . ./.env; elif [ -f .env.example ]; then . ./.env.example; fi; set +a; echo \"Verifier API: http://localhost:${PORT:-4000}\"; echo \"Demo UI: http://localhost:3000\"; concurrently -n verifier,demo -c blue,green \"npm --workspace @wpis/verifier run dev\" \"npm --workspace @wpis/demo run dev\"'",
+    "dev:watch": "sh -c 'set -a; if [ -f .env ]; then . ./.env; elif [ -f .env.example ]; then . ./.env.example; fi; set +a; echo \"Verifier API (watch): http://localhost:${PORT:-4000}\"; echo \"Demo UI: http://localhost:3000\"; concurrently -n verifier,demo -c blue,green \"npm --workspace @wpis/verifier run dev:watch\" \"npm --workspace @wpis/demo run dev\"'"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
