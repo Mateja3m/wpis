@@ -1,14 +1,16 @@
-# @wpis/adapter-optimism
+# @wpis/adapter-arbitrum
 
-Optimism adapter implementation of the `ChainAdapter` interface.
+Arbitrum One adapter implementation of the `ChainAdapter` interface for developer infrastructure use.
 
-## Behavior
-- `createIntent()`: validates input, defaults chain to `eip155:42161`, defaults confirmations to `2`, enforces reference uniqueness via callback or in-memory set.
-- `buildRequest()`: builds EIP-681 links for native and ERC20 transfers.
-- `verify()`: checks intent expiration, scans recent blocks/logs through `viem`, returns `PENDING | DETECTED | CONFIRMED | EXPIRED`.
+## Deterministic Verification Model
+- Strict `chainId` requirement: `eip155:42161`.
+- Strict recipient matching.
+- Strict amount threshold: observed value must be `>= intent.amount`.
+- Strict ERC20 contract matching through the log `address` filter.
+- Confirmation policy gate before `CONFIRMED`.
+- Deterministic expiration at `expiresAt`.
+- Scan window bounded by `EVM_SCAN_BLOCKS` equivalent adapter option (`scanBlocks`).
 
-## Verification limits
-- Only scans latest `scanBlocks` range.
-- Native matching is based on `to` and `value >= amount`.
-- ERC20 matching is based on `Transfer` logs with `to` and `value >= amount`.
-- Designed for PoC simplicity, not full production fraud prevention.
+PoC uses recipient + amount + time window strategy for intent mapping.
+This is a minimal deterministic strategy suitable for dev tooling experimentation.
+Advanced mapping strategies are reserved for Phase 2.

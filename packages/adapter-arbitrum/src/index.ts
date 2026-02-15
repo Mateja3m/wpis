@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  WpisError,
   isIntentExpired,
   validateCreateIntentInput,
   type ChainAdapter,
@@ -8,16 +9,11 @@ import {
   type PaymentRequest,
   type VerificationResult
 } from "@wpis/core";
-import {
-  createPublicClient,
-  http,
-  parseAbiItem,
-  type Address,
-  type Hash
-} from "viem";
-import { optimism } from "viem/chains";
+import { createPublicClient, http, parseAbiItem, type Address, type Hash } from "viem";
+import { arbitrum } from "viem/chains";
 
-const DEFAULT_CHAIN_ID = "eip155:42161";
+const ARBITRUM_CHAIN_ID = 42161;
+const ARBITRUM_CAIP2 = `eip155:${ARBITRUM_CHAIN_ID}`;
 const DEFAULT_MIN_CONFIRMATIONS = 2;
 const DEFAULT_SCAN_BLOCKS = 500n;
 
@@ -44,6 +40,7 @@ export interface Erc20TransferLog {
 }
 
 export interface EvmClient {
+  getChainId(): Promise<number>;
   getBlockNumber(): Promise<bigint>;
   getBlock(args: { blockNumber: bigint; includeTransactions: true }): Promise<EvmBlock>;
   getLogs(args: {
@@ -75,15 +72,16 @@ function toBigInt(amount: string): bigint {
 function createDefaultClient(rpcUrl?: string): EvmClient {
   const resolvedUrl = rpcUrl ?? process.env.EVM_RPC_URL;
   if (!resolvedUrl) {
-    throw new Error("EVM_RPC_URL is required for verification");
+    throw new WpisError("RPC_ERROR", "EVM_RPC_URL is required for verification");
   }
 
   const client = createPublicClient({
-    chain: optimism,
+    chain: arbitrum,
     transport: http(resolvedUrl)
   });
 
   return {
+    getChainId: () => client.getChainId(),
     getBlockNumber: () => client.getBlockNumber(),
     getBlock: async (args) => {
       const block = await client.getBlock(args);
@@ -147,14 +145,19 @@ export class ArbitrumAdapter implements ChainAdapter {
   public createIntent(input: CreateIntentInput): PaymentIntent {
     validateCreateIntentInput(input);
 
+    const chainId = input.chainId ?? ARBITRUM_CAIP2;
+    if (chainId !== ARBITRUM_CAIP2) {
+      throw new WpisError("CHAIN_MISMATCH", `chainId must be ${ARBITRUM_CAIP2}`);
+    }
+
     if (this.isReferenceUsed(input.reference)) {
-      throw new Error("reference must be unique");
+      throw new WpisError("VALIDATION_ERROR", "reference must be unique");
     }
 
     const createdAt = this.now();
     const expiresAt = new Date(input.expiresAt);
     if (expiresAt.getTime() <= createdAt.getTime()) {
-      throw new Error("expiresAt must be greater than current time");
+      throw new WpisError("VALIDATION_ERROR", "expiresAt must be greater than current time");
     }
 
     this.markReferenceUsed(input.reference);
@@ -163,7 +166,7 @@ export class ArbitrumAdapter implements ChainAdapter {
       id: randomUUID(),
       createdAt: createdAt.toISOString(),
       expiresAt: expiresAt.toISOString(),
-      chainId: input.chainId ?? DEFAULT_CHAIN_ID,
+      chainId,
       asset: input.asset,
       recipient: input.recipient,
       amount: input.amount,
@@ -178,13 +181,14 @@ export class ArbitrumAdapter implements ChainAdapter {
   public buildRequest(intent: PaymentIntent): PaymentRequest {
     const paymentLink =
       intent.asset.type === "native"
-        ? `ethereum:${intent.recipient}?value=${intent.amount}`
-        : `ethereum:${intent.asset.contractAddress}/transfer?address=${intent.recipient}&uint256=${intent.amount}`;
+        ? `ethereum:${intent.recipient}@${ARBITRUM_CHAIN_ID}?value=${intent.amount}`
+        : `ethereum:${intent.asset.contractAddress}@${ARBITRUM_CHAIN_ID}/transfer?address=${intent.recipient}&uint256=${intent.amount}`;
 
     const instructions = [
-      `Send ${intent.amount} base units of ${intent.asset.symbol} to ${intent.recipient}.`,
-      `Use reference: ${intent.reference}.`,
-      `Payment expires at ${intent.expiresAt}.`
+      "Developer PoC mapping strategy: recipient + amount + scan window.",
+      "Send exact or greater base-unit amount to the intent recipient.",
+      `Reference (off-chain): ${intent.reference}`,
+      `Intent expires at ${intent.expiresAt}.`
     ];
 
     return {
@@ -196,11 +200,41 @@ export class ArbitrumAdapter implements ChainAdapter {
   }
 
   public async verify(intent: PaymentIntent): Promise<VerificationResult> {
-    if (isIntentExpired(intent, this.now())) {
-      return { status: "EXPIRED", reason: "intent expired" };
+    if (intent.chainId !== ARBITRUM_CAIP2) {
+      return {
+        status: "FAILED",
+        reason: `intent chain mismatch: expected ${ARBITRUM_CAIP2}`,
+        errorCode: "CHAIN_MISMATCH"
+      };
     }
 
-    return intent.asset.type === "native" ? this.verifyNative(intent) : this.verifyErc20(intent);
+    if (isIntentExpired(intent, this.now())) {
+      return {
+        status: "EXPIRED",
+        reason: "intent expired",
+        errorCode: "EXPIRED_ERROR"
+      };
+    }
+
+    try {
+      const rpcChainId = await this.client.getChainId();
+      if (rpcChainId !== ARBITRUM_CHAIN_ID) {
+        return {
+          status: "FAILED",
+          reason: `rpc chain mismatch: expected ${ARBITRUM_CHAIN_ID}, got ${rpcChainId}`,
+          errorCode: "CHAIN_MISMATCH"
+        };
+      }
+
+      return intent.asset.type === "native" ? this.verifyNative(intent) : this.verifyErc20(intent);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "rpc verification failed";
+      return {
+        status: "FAILED",
+        reason: message,
+        errorCode: "RPC_ERROR"
+      };
+    }
   }
 
   private async verifyNative(intent: PaymentIntent): Promise<VerificationResult> {
@@ -239,21 +273,32 @@ export class ArbitrumAdapter implements ChainAdapter {
       return { status: "CONFIRMED", txHash: detected.hash, confirmations: detected.confirmations };
     }
 
-    return { status: "DETECTED", txHash: detected.hash, confirmations: detected.confirmations };
+    return {
+      status: "DETECTED",
+      txHash: detected.hash,
+      confirmations: detected.confirmations,
+      reason: "confirmation policy not yet met",
+      errorCode: "CONFIRMATION_PENDING"
+    };
   }
 
   private async verifyErc20(intent: PaymentIntent): Promise<VerificationResult> {
     if (!intent.asset.contractAddress) {
-      return { status: "FAILED", reason: "missing erc20 contract address" };
+      return {
+        status: "FAILED",
+        reason: "missing erc20 contract address",
+        errorCode: "VALIDATION_ERROR"
+      };
     }
 
     const currentBlock = await this.client.getBlockNumber();
     const fromBlock = currentBlock > this.scanBlocks ? currentBlock - this.scanBlocks : 0n;
     const recipient = normalizeAddress(intent.recipient);
     const minimumAmount = toBigInt(intent.amount);
+    const contractAddress = normalizeAddress(intent.asset.contractAddress);
 
     const logs = await this.client.getLogs({
-      address: normalizeAddress(intent.asset.contractAddress),
+      address: contractAddress,
       event: transferEvent,
       args: { to: recipient },
       fromBlock,
@@ -270,15 +315,23 @@ export class ArbitrumAdapter implements ChainAdapter {
     }
 
     const confirmations = Number(currentBlock - match.blockNumber + 1n);
-
     if (confirmations >= intent.confirmationPolicy.minConfirmations) {
       return { status: "CONFIRMED", txHash: match.transactionHash, confirmations };
     }
 
-    return { status: "DETECTED", txHash: match.transactionHash, confirmations };
+    return {
+      status: "DETECTED",
+      txHash: match.transactionHash,
+      confirmations,
+      reason: "confirmation policy not yet met",
+      errorCode: "CONFIRMATION_PENDING"
+    };
   }
 }
 
 export function createArbitrumAdapter(options?: ArbitrumAdapterOptions): ArbitrumAdapter {
   return new ArbitrumAdapter(options);
 }
+
+export const ARBITRUM_ONE_CAIP2 = ARBITRUM_CAIP2;
+export const ARBITRUM_ONE_CHAIN_ID = ARBITRUM_CHAIN_ID;

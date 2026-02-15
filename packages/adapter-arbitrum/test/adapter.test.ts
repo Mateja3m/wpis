@@ -20,6 +20,7 @@ function createIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
 
 class MockClient implements EvmClient {
   public constructor(
+    private readonly chainId: number,
     private readonly blockNumber: bigint,
     private readonly transactionsByBlock: Record<string, EvmTransaction[]>,
     private readonly logs: Array<{
@@ -28,6 +29,10 @@ class MockClient implements EvmClient {
       args: { to?: `0x${string}`; value?: bigint };
     }> = []
   ) {}
+
+  public async getChainId(): Promise<number> {
+    return this.chainId;
+  }
 
   public async getBlockNumber(): Promise<bigint> {
     return this.blockNumber;
@@ -55,8 +60,8 @@ class MockClient implements EvmClient {
 }
 
 describe("ArbitrumAdapter", () => {
-  it("creates intents with defaults and unique references", () => {
-    const adapter = new ArbitrumAdapter({ client: new MockClient(100n, {}) });
+  it("creates intents with arbitrum defaults and unique references", () => {
+    const adapter = new ArbitrumAdapter({ client: new MockClient(42161, 100n, {}) });
 
     const intent = adapter.createIntent({
       asset: { symbol: "ETH", decimals: 18, type: "native" },
@@ -80,6 +85,21 @@ describe("ArbitrumAdapter", () => {
     ).toThrow(/unique/);
   });
 
+  it("rejects non-arbitrum chain id during creation", () => {
+    const adapter = new ArbitrumAdapter({ client: new MockClient(42161, 100n, {}) });
+
+    expect(() =>
+      adapter.createIntent({
+        chainId: "eip155:10",
+        asset: { symbol: "ETH", decimals: 18, type: "native" },
+        recipient: "0x1111111111111111111111111111111111111111",
+        amount: "1",
+        reference: "order-2",
+        expiresAt: "2099-01-01T00:00:00.000Z"
+      })
+    ).toThrow(/chainId/);
+  });
+
   it("returns confirmed for native transfer with enough confirmations", async () => {
     const tx: EvmTransaction = {
       hash: "0xabc",
@@ -87,7 +107,7 @@ describe("ArbitrumAdapter", () => {
       value: 100n,
       blockNumber: 99n
     };
-    const client = new MockClient(100n, { "100": [], "99": [tx] });
+    const client = new MockClient(42161, 100n, { "100": [], "99": [tx] });
     const adapter = new ArbitrumAdapter({ client, scanBlocks: 10n });
 
     const result = await adapter.verify(createIntent());
@@ -97,8 +117,8 @@ describe("ArbitrumAdapter", () => {
     expect(result.confirmations).toBe(2);
   });
 
-  it("returns detected for erc20 transfer below min confirmations", async () => {
-    const client = new MockClient(100n, {}, [
+  it("returns detected with CONFIRMATION_PENDING for erc20 below policy", async () => {
+    const client = new MockClient(42161, 100n, {}, [
       {
         transactionHash: "0xdef",
         blockNumber: 100n,
@@ -123,18 +143,28 @@ describe("ArbitrumAdapter", () => {
     );
 
     expect(result.status).toBe("DETECTED");
-    expect(result.txHash).toBe("0xdef");
+    expect(result.errorCode).toBe("CONFIRMATION_PENDING");
     expect(result.confirmations).toBe(1);
+  });
+
+  it("returns chain mismatch when rpc chain is not arbitrum one", async () => {
+    const adapter = new ArbitrumAdapter({ client: new MockClient(10, 100n, {}), scanBlocks: 10n });
+
+    const result = await adapter.verify(createIntent());
+
+    expect(result.status).toBe("FAILED");
+    expect(result.errorCode).toBe("CHAIN_MISMATCH");
   });
 
   it("returns expired when intent expiry has passed", async () => {
     const adapter = new ArbitrumAdapter({
-      client: new MockClient(100n, {}),
+      client: new MockClient(42161, 100n, {}),
       now: () => new Date("2099-01-02T00:00:00.000Z")
     });
 
     const result = await adapter.verify(createIntent({ expiresAt: "2099-01-01T00:00:00.000Z" }));
 
     expect(result.status).toBe("EXPIRED");
+    expect(result.errorCode).toBe("EXPIRED_ERROR");
   });
 });
