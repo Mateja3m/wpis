@@ -63,8 +63,13 @@ npm run test
 npm run dev
 ```
 
-- Verifier: `http://localhost:4000`
-- Playground: `http://localhost:3000`
+- Playground UI (`@wpis/demo`): `http://localhost:3000`
+- Verifier API (`@wpis/verifier`): `http://localhost:4000`
+  - Health: `http://localhost:4000/health`
+  - Intents: `http://localhost:4000/intents`
+
+Troubleshooting:
+- If `Create Intent` fails with `ERR_CONNECTION_REFUSED`, verify `http://localhost:4000/health` is reachable.
 
 ## API
 - `GET /health`
