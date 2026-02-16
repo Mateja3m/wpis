@@ -3,7 +3,7 @@
 ## Reporting a Vulnerability
 Please do not open public issues for security vulnerabilities.
 
-Report privately to: security@wpis.dev
+Report privately to: your-security-email@example.com
 
 Include:
 - Affected component/package
