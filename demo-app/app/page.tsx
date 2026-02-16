@@ -19,6 +19,7 @@ import {
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography
 } from "@mui/material";
 import type { CreateIntentInput, PaymentIntent, PaymentStatus } from "@wpis/core";
@@ -83,6 +84,7 @@ export default function Page(): ReactElement {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<PaymentStatus | null>(null);
   const [confirmations, setConfirmations] = useState<number | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
   const [verificationReason, setVerificationReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
@@ -115,7 +117,12 @@ export default function Page(): ReactElement {
         if (!response.ok) {
           return;
         }
-        const payload = (await response.json()) as { intent: PaymentIntent; status: PaymentStatus };
+        const payload = (await response.json()) as {
+          intent: PaymentIntent;
+          status: PaymentStatus;
+          txHash?: string | null;
+          confirmations?: number | null;
+        };
         setCreated((previous) => {
           if (!previous) {
             return previous;
@@ -126,6 +133,8 @@ export default function Page(): ReactElement {
           };
         });
         setStatus(payload.status);
+        setTxHash(payload.txHash ?? null);
+        setConfirmations(payload.confirmations ?? null);
         setVerificationReason(statusReason(payload.status));
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
@@ -201,6 +210,7 @@ export default function Page(): ReactElement {
       const payload = (await response.json()) as CreatedIntentPayload;
       setCreated(payload);
       setStatus(payload.intent.status);
+      setTxHash(null);
       setConfirmations(null);
       setVerificationReason(statusReason(payload.intent.status));
       setOpen(true);
@@ -220,6 +230,24 @@ export default function Page(): ReactElement {
     } catch {
       setCopyMessage(`Failed to copy ${label.toLowerCase()}.`);
     }
+  };
+
+  const renderConfirmations = (): ReactElement | string => {
+    const effectiveStatus = status ?? created?.intent.status ?? null;
+    if (effectiveStatus === "DETECTED" || effectiveStatus === "CONFIRMED") {
+      if (typeof confirmations === "number") {
+        return confirmations.toString();
+      }
+      if (txHash) {
+        return (
+          <Tooltip title="confirmations not reported by adapter" placement="top">
+            <span>0</span>
+          </Tooltip>
+        );
+      }
+      return "-";
+    }
+    return "-";
   };
 
   return (
@@ -353,7 +381,7 @@ export default function Page(): ReactElement {
                 <Typography variant="body2">
                   State: <strong>{status ?? created.intent.status}</strong>
                 </Typography>
-                <Typography variant="body2">Confirmations: {confirmations ?? "N/A"}</Typography>
+                <Typography variant="body2">Confirmations: {renderConfirmations()}</Typography>
                 {verificationReason ? <Typography variant="body2">Reason: {verificationReason}</Typography> : null}
                 <Typography variant="body2">Expires at: {formatUsDateTime(created.intent.expiresAt)}</Typography>
 

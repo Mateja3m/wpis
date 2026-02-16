@@ -182,7 +182,13 @@ export function createVerifierServer(): VerifierServer {
       return;
     }
 
-    response.json({ intent: stored.intent, status: stored.status });
+    response.json({
+      intent: stored.intent,
+      status: stored.status,
+      txHash: stored.txHash,
+      confirmations: stored.confirmations,
+      lastCheckedAt: stored.lastCheckedAt
+    });
   });
 
   app.post("/intents/:id/verify", async (request: Request, response: Response) => {

@@ -5,6 +5,9 @@ export interface StoredIntent {
   id: string;
   intent: PaymentIntent;
   status: PaymentStatus;
+  txHash: string | null;
+  confirmations: number | null;
+  lastCheckedAt: string | null;
 }
 
 export interface IntentStatusCounts {
@@ -30,6 +33,9 @@ export class VerifierDb {
         id TEXT PRIMARY KEY,
         json TEXT NOT NULL,
         status TEXT NOT NULL,
+        tx_hash TEXT,
+        confirmations INTEGER,
+        last_checked_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -46,6 +52,18 @@ export class VerifierDb {
       CREATE INDEX IF NOT EXISTS idx_intents_status ON intents(status);
       CREATE INDEX IF NOT EXISTS idx_events_intent_id ON events(intent_id);
     `);
+
+    this.ensureIntentsColumn("tx_hash", "TEXT");
+    this.ensureIntentsColumn("confirmations", "INTEGER");
+    this.ensureIntentsColumn("last_checked_at", "TEXT");
+  }
+
+  private ensureIntentsColumn(columnName: string, columnType: string): void {
+    const columns = this.db.prepare("PRAGMA table_info(intents)").all() as Array<{ name: string }>;
+    const exists = columns.some((column) => column.name === columnName);
+    if (!exists) {
+      this.db.exec(`ALTER TABLE intents ADD COLUMN ${columnName} ${columnType}`);
+    }
   }
 
   public createIntent(intent: PaymentIntent): void {
@@ -68,8 +86,17 @@ export class VerifierDb {
 
   public getIntent(id: string): StoredIntent | null {
     const row = this.db
-      .prepare("SELECT id, json, status FROM intents WHERE id = ?")
-      .get(id) as { id: string; json: string; status: PaymentStatus } | undefined;
+      .prepare("SELECT id, json, status, tx_hash, confirmations, last_checked_at FROM intents WHERE id = ?")
+      .get(id) as
+      | {
+          id: string;
+          json: string;
+          status: PaymentStatus;
+          tx_hash: string | null;
+          confirmations: number | null;
+          last_checked_at: string | null;
+        }
+      | undefined;
 
     if (!row) {
       return null;
@@ -78,7 +105,10 @@ export class VerifierDb {
     return {
       id: row.id,
       intent: JSON.parse(row.json) as PaymentIntent,
-      status: row.status
+      status: row.status,
+      txHash: row.tx_hash,
+      confirmations: row.confirmations,
+      lastCheckedAt: row.last_checked_at
     };
   }
 
@@ -134,31 +164,48 @@ export class VerifierDb {
       return false;
     }
 
-    if (current.status === status) {
-      return false;
-    }
-    if (!canTransition(current.status, status)) {
+    const canMoveToStatus = current.status === status || canTransition(current.status, status);
+    if (!canMoveToStatus) {
       return false;
     }
 
-    const updatedIntent: PaymentIntent = {
-      ...current.intent,
-      status
-    };
+    const statusChanged = current.status !== status;
+    const nextStatus = statusChanged ? status : current.status;
+    const updatedIntent: PaymentIntent = statusChanged ? { ...current.intent, status: nextStatus } : current.intent;
+    const nextTxHash = verification.txHash ?? current.txHash;
+    const nextConfirmations = verification.confirmations ?? current.confirmations;
 
     const now = new Date().toISOString();
 
     this.db
-      .prepare("UPDATE intents SET json = @json, status = @status, updated_at = @updatedAt WHERE id = @id")
+      .prepare(
+        `UPDATE intents
+         SET json = @json,
+             status = @status,
+             tx_hash = @txHash,
+             confirmations = @confirmations,
+             last_checked_at = @lastCheckedAt,
+             updated_at = @updatedAt
+         WHERE id = @id`
+      )
       .run({
         id,
         json: JSON.stringify(updatedIntent),
-        status,
+        status: nextStatus,
+        txHash: nextTxHash,
+        confirmations: nextConfirmations,
+        lastCheckedAt: now,
         updatedAt: now
       });
 
-    this.addEvent(id, "INTENT_VERIFIED", verification);
-    return true;
+    this.addEvent(id, "INTENT_VERIFIED", {
+      ...verification,
+      status: nextStatus,
+      txHash: nextTxHash ?? undefined,
+      confirmations: nextConfirmations ?? undefined,
+      at: now
+    });
+    return statusChanged;
   }
 
   private addEvent(intentId: string, type: string, payload: Record<string, unknown> | VerificationResult): void {
