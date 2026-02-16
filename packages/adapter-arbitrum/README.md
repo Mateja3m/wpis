@@ -1,9 +1,9 @@
 # @wpis/adapter-arbitrum
 
-Arbitrum One adapter implementation of the `ChainAdapter` interface for developer infrastructure use.
+Arbitrum Sepolia-first adapter implementation of the `ChainAdapter` interface for developer infrastructure use.
 
 ## Deterministic Verification Model
-- Strict `chainId` requirement: `eip155:42161`.
+- Strict `chainId` requirement: `eip155:421614` (PoC default).
 - Strict recipient matching.
 - Strict amount threshold: observed value must be `>= intent.amount`.
 - Strict ERC20 contract matching through the log `address` filter.

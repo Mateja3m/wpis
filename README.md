@@ -1,6 +1,6 @@
 # WPIS - Web3 Payment Infrastructure Standard (Arbitrum PoC)
 
-Infrastructure-only developer tooling primitive for deterministic payment intent verification on Arbitrum One.
+Infrastructure-only developer tooling primitive for deterministic payment intent verification on Arbitrum Sepolia.
 
 ## Why This Is Dev Tooling
 - Provides a reusable SDK + verifier pattern for protocol teams, indexers, relayers, and app developers.
@@ -14,7 +14,7 @@ Infrastructure-only developer tooling primitive for deterministic payment intent
 
 ## Scope (PoC)
 - `@wpis/core`: intent model, validation, typed error taxonomy, lifecycle state machine.
-- `@wpis/adapter-arbitrum`: Arbitrum One adapter using `viem`.
+- `@wpis/adapter-arbitrum`: Arbitrum Sepolia-first adapter using `viem`.
 - `@wpis/verifier`: SQLite-backed verification API with polling + health endpoint.
 - `@wpis/react`: minimal reusable payment UI primitives.
 - `@wpis/demo`: MUI developer playground reference app.

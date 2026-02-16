@@ -28,6 +28,6 @@ State regression is disallowed by transition rules.
 
 ## Arbitrum Alignment
 This package is chain-agnostic but designed to support Arbitrum-first adapters by:
-- preserving CAIP-like chain identifiers (`eip155:42161` in adapter layer),
+- preserving CAIP-like chain identifiers (`eip155:421614` in adapter layer PoC default),
 - enforcing deterministic status semantics needed for reproducible verifier behavior,
 - separating domain logic from chain access to keep tooling composable.
