@@ -35,7 +35,7 @@ Infrastructure-only developer tooling primitive for deterministic payment intent
 
 ## Monorepo Structure
 ```text
-/Users/milanmatejic/Desktop/personal/Projects/wpis
+/wpis
   /packages
     /core
     /adapter-arbitrum
