@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { getAddress, pad, parseAbiItem, toEventSelector } from "viem";
 import type { PaymentIntent } from "@wpis/core";
-import { ArbitrumAdapter, type EvmClient, type EvmTransaction } from "../src/index.js";
+import {
+  ArbitrumAdapter,
+  buildErc20TransferLogQuery,
+  computeScanRange,
+  type EvmClient,
+  type EvmTransaction
+} from "../src/index.js";
 
 function createIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
   return {
     id: "intent-1",
     createdAt: "2025-01-01T00:00:00.000Z",
     expiresAt: "2099-01-01T00:00:00.000Z",
-    chainId: "eip155:42161",
+    chainId: "eip155:421614",
     asset: { symbol: "ETH", decimals: 18, type: "native" },
     recipient: "0x1111111111111111111111111111111111111111",
     amount: "100",
@@ -60,8 +67,31 @@ class MockClient implements EvmClient {
 }
 
 describe("ArbitrumAdapter", () => {
+  it("computes inclusive scan range with zero floor", () => {
+    expect(computeScanRange(1000n, 150n)).toEqual({ fromBlock: 850n, toBlock: 1000n });
+    expect(computeScanRange(100n, 500n)).toEqual({ fromBlock: 0n, toBlock: 100n });
+  });
+
+  it("builds erc20 transfer query using to-address args and transfer topic", () => {
+    const query = buildErc20TransferLogQuery(
+      "0x2222222222222222222222222222222222222222",
+      "0x1111111111111111111111111111111111111111",
+      50n,
+      100n
+    );
+    const topic0 = toEventSelector(query.event);
+    const expectedTopic0 = toEventSelector(parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)"));
+
+    expect(query.address).toBe("0x2222222222222222222222222222222222222222");
+    expect(query.args.to).toBe(getAddress("0x1111111111111111111111111111111111111111"));
+    expect(query.fromBlock).toBe(50n);
+    expect(query.toBlock).toBe(100n);
+    expect(topic0).toBe(expectedTopic0);
+    expect(pad(query.args.to)).toBe("0x0000000000000000000000001111111111111111111111111111111111111111");
+  });
+
   it("creates intents with arbitrum defaults and unique references", () => {
-    const adapter = new ArbitrumAdapter({ client: new MockClient(42161, 100n, {}) });
+    const adapter = new ArbitrumAdapter({ client: new MockClient(421614, 100n, {}) });
 
     const intent = adapter.createIntent({
       asset: { symbol: "ETH", decimals: 18, type: "native" },
@@ -71,7 +101,7 @@ describe("ArbitrumAdapter", () => {
       expiresAt: "2099-01-01T00:00:00.000Z"
     });
 
-    expect(intent.chainId).toBe("eip155:42161");
+    expect(intent.chainId).toBe("eip155:421614");
     expect(intent.confirmationPolicy.minConfirmations).toBe(2);
 
     expect(() =>
@@ -86,11 +116,11 @@ describe("ArbitrumAdapter", () => {
   });
 
   it("rejects non-arbitrum chain id during creation", () => {
-    const adapter = new ArbitrumAdapter({ client: new MockClient(42161, 100n, {}) });
+    const adapter = new ArbitrumAdapter({ client: new MockClient(421614, 100n, {}) });
 
     expect(() =>
       adapter.createIntent({
-        chainId: "eip155:10",
+        chainId: "eip155:42161",
         asset: { symbol: "ETH", decimals: 18, type: "native" },
         recipient: "0x1111111111111111111111111111111111111111",
         amount: "1",
@@ -107,7 +137,7 @@ describe("ArbitrumAdapter", () => {
       value: 100n,
       blockNumber: 99n
     };
-    const client = new MockClient(42161, 100n, { "100": [], "99": [tx] });
+    const client = new MockClient(421614, 100n, { "100": [], "99": [tx] });
     const adapter = new ArbitrumAdapter({ client, scanBlocks: 10n });
 
     const result = await adapter.verify(createIntent());
@@ -118,7 +148,7 @@ describe("ArbitrumAdapter", () => {
   });
 
   it("returns detected with CONFIRMATION_PENDING for erc20 below policy", async () => {
-    const client = new MockClient(42161, 100n, {}, [
+    const client = new MockClient(421614, 100n, {}, [
       {
         transactionHash: "0xdef",
         blockNumber: 100n,
@@ -147,8 +177,8 @@ describe("ArbitrumAdapter", () => {
     expect(result.confirmations).toBe(1);
   });
 
-  it("returns chain mismatch when rpc chain is not arbitrum one", async () => {
-    const adapter = new ArbitrumAdapter({ client: new MockClient(10, 100n, {}), scanBlocks: 10n });
+  it("returns chain mismatch when rpc chain is not arbitrum sepolia", async () => {
+    const adapter = new ArbitrumAdapter({ client: new MockClient(42161, 100n, {}), scanBlocks: 10n });
 
     const result = await adapter.verify(createIntent());
 
@@ -158,7 +188,7 @@ describe("ArbitrumAdapter", () => {
 
   it("returns expired when intent expiry has passed", async () => {
     const adapter = new ArbitrumAdapter({
-      client: new MockClient(42161, 100n, {}),
+      client: new MockClient(421614, 100n, {}),
       now: () => new Date("2099-01-02T00:00:00.000Z")
     });
 

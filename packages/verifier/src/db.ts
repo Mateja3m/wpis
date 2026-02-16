@@ -7,6 +7,14 @@ export interface StoredIntent {
   status: PaymentStatus;
 }
 
+export interface IntentStatusCounts {
+  pending: number;
+  detected: number;
+  confirmed: number;
+  expired: number;
+  failed: number;
+}
+
 export class VerifierDb {
   private readonly db: Database.Database;
 
@@ -88,6 +96,36 @@ export class VerifierDb {
       .map((row) => JSON.parse(row.json) as PaymentIntent)
       .find((intent) => intent.reference === reference);
     return found ?? null;
+  }
+
+  public getStatusCounts(): IntentStatusCounts {
+    const rows = this.db
+      .prepare("SELECT status, COUNT(*) as count FROM intents GROUP BY status")
+      .all() as Array<{ status: PaymentStatus; count: number }>;
+
+    const counts: IntentStatusCounts = {
+      pending: 0,
+      detected: 0,
+      confirmed: 0,
+      expired: 0,
+      failed: 0
+    };
+
+    for (const row of rows) {
+      if (row.status === "PENDING") {
+        counts.pending = row.count;
+      } else if (row.status === "DETECTED") {
+        counts.detected = row.count;
+      } else if (row.status === "CONFIRMED") {
+        counts.confirmed = row.count;
+      } else if (row.status === "EXPIRED") {
+        counts.expired = row.count;
+      } else if (row.status === "FAILED") {
+        counts.failed = row.count;
+      }
+    }
+
+    return counts;
   }
 
   public updateIntentStatus(id: string, status: PaymentStatus, verification: VerificationResult): boolean {

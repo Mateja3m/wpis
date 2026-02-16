@@ -9,15 +9,17 @@ import {
   type PaymentRequest,
   type VerificationResult
 } from "@wpis/core";
-import { createPublicClient, http, parseAbiItem, type Address, type Hash } from "viem";
+import { createPublicClient, getAddress, http, pad, parseAbiItem, toEventSelector, type Address, type Hash } from "viem";
 import { arbitrum, arbitrumSepolia } from "viem/chains";
 
-const ARBITRUM_CHAIN_ID = 42161;
-const ARBITRUM_CAIP2 = `eip155:${ARBITRUM_CHAIN_ID}`;
+const DEFAULT_ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
+const DEFAULT_ARBITRUM_SEPOLIA_CAIP2 = `eip155:${DEFAULT_ARBITRUM_SEPOLIA_CHAIN_ID}`;
 const DEFAULT_MIN_CONFIRMATIONS = 2;
 const DEFAULT_SCAN_BLOCKS = 500n;
+const ERC20_LOG_CHUNK_SIZE = 500n;
 
 const transferEvent = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
+const transferTopic0 = toEventSelector(transferEvent);
 
 export interface EvmTransaction {
   hash: Hash;
@@ -63,11 +65,71 @@ export interface ArbitrumAdapterOptions {
 }
 
 function normalizeAddress(address: string): Address {
-  return address.toLowerCase() as Address;
+  return getAddress(address);
 }
 
 function toBigInt(amount: string): bigint {
   return BigInt(amount);
+}
+
+function isDebugEnabled(): boolean {
+  return process.env.DEBUG_WPIS === "1";
+}
+
+function isVerboseEnabled(): boolean {
+  return process.env.DEBUG_WPIS_VERBOSE === "1";
+}
+
+function shouldDumpFilters(): boolean {
+  return process.env.DEBUG_WPIS_DUMP_FILTERS === "1";
+}
+
+function debugLog(message: string, payload?: Record<string, unknown>): void {
+  if (!isDebugEnabled()) {
+    return;
+  }
+  if (payload) {
+    console.info(`[wpis:adapter-arbitrum] ${message}`, payload);
+    return;
+  }
+  console.info(`[wpis:adapter-arbitrum] ${message}`);
+}
+
+function toRpcHost(rpcUrl: string | undefined): string {
+  if (!rpcUrl) {
+    return "unknown";
+  }
+  try {
+    return new URL(rpcUrl).hostname;
+  } catch {
+    return "invalid-url";
+  }
+}
+
+export function computeScanRange(currentBlock: bigint, scanBlocks: bigint): { fromBlock: bigint; toBlock: bigint } {
+  const fromBlock = currentBlock > scanBlocks ? currentBlock - scanBlocks : 0n;
+  return { fromBlock, toBlock: currentBlock };
+}
+
+export function buildErc20TransferLogQuery(
+  contractAddress: Address,
+  recipient: Address,
+  fromBlock: bigint,
+  toBlock: bigint
+): {
+  address: Address;
+  event: typeof transferEvent;
+  args: { to: Address };
+  fromBlock: bigint;
+  toBlock: bigint;
+} {
+  return {
+    address: contractAddress,
+    event: transferEvent,
+    args: { to: recipient },
+    fromBlock,
+    toBlock
+  };
 }
 
 function resolveChain(expectedChainId: number): typeof arbitrum | typeof arbitrumSepolia {
@@ -140,10 +202,11 @@ export class ArbitrumAdapter implements ChainAdapter {
   private readonly isReferenceUsed: (reference: string) => boolean;
   private readonly markReferenceUsed: (reference: string) => void;
   private readonly client: EvmClient;
+  private readonly rpcHost: string;
 
   public constructor(options: ArbitrumAdapterOptions = {}) {
     this.scanBlocks = options.scanBlocks ?? DEFAULT_SCAN_BLOCKS;
-    this.expectedChainId = options.expectedChainId ?? ARBITRUM_CHAIN_ID;
+    this.expectedChainId = options.expectedChainId ?? DEFAULT_ARBITRUM_SEPOLIA_CHAIN_ID;
     this.expectedCaip2 = `eip155:${this.expectedChainId}`;
     this.now = options.now ?? (() => new Date());
 
@@ -156,6 +219,7 @@ export class ArbitrumAdapter implements ChainAdapter {
       });
 
     this.client = options.client ?? createDefaultClient(options.rpcUrl, this.expectedChainId);
+    this.rpcHost = toRpcHost(options.rpcUrl ?? process.env.EVM_RPC_URL);
   }
 
   public createIntent(input: CreateIntentInput): PaymentIntent {
@@ -243,15 +307,36 @@ export class ArbitrumAdapter implements ChainAdapter {
 
     try {
       const rpcChainId = await this.client.getChainId();
-      if (rpcChainId !== this.expectedChainId) {
+      if (rpcChainId !== DEFAULT_ARBITRUM_SEPOLIA_CHAIN_ID) {
         return {
           status: "FAILED",
-          reason: `rpc chain mismatch: expected ${this.expectedChainId}, got ${rpcChainId}`,
+          reason: `rpc chain mismatch: expected ${DEFAULT_ARBITRUM_SEPOLIA_CHAIN_ID}, got ${rpcChainId}`,
           errorCode: "CHAIN_MISMATCH"
         };
       }
 
-      return intent.asset.type === "native" ? this.verifyNative(intent) : this.verifyErc20(intent);
+      const latestBlock = await this.client.getBlockNumber();
+      const scanRange = computeScanRange(latestBlock, this.scanBlocks);
+      debugLog("verify.begin", {
+        path: intent.asset.type,
+        rpcHost: this.rpcHost,
+        rpcChainId,
+        expectedChainId: DEFAULT_ARBITRUM_SEPOLIA_CHAIN_ID,
+        latestBlock: latestBlock.toString(),
+        fromBlock: scanRange.fromBlock.toString(),
+        toBlock: scanRange.toBlock.toString()
+      });
+      debugLog("verify.criteria", {
+        recipient: normalizeAddress(intent.recipient),
+        contractAddress: intent.asset.contractAddress ? normalizeAddress(intent.asset.contractAddress) : null,
+        amountBaseUnits: intent.amount,
+        amountComparison: ">=",
+        minConfirmations: intent.confirmationPolicy.minConfirmations
+      });
+
+      return intent.asset.type === "native"
+        ? this.verifyNative(intent, latestBlock, scanRange.fromBlock)
+        : this.verifyErc20(intent, latestBlock, scanRange.fromBlock);
     } catch (error) {
       const message = error instanceof Error ? error.message : "rpc verification failed";
       return {
@@ -262,21 +347,44 @@ export class ArbitrumAdapter implements ChainAdapter {
     }
   }
 
-  private async verifyNative(intent: PaymentIntent): Promise<VerificationResult> {
-    const currentBlock = await this.client.getBlockNumber();
-    const fromBlock = currentBlock > this.scanBlocks ? currentBlock - this.scanBlocks : 0n;
+  private async verifyNative(intent: PaymentIntent, currentBlock: bigint, fromBlock: bigint): Promise<VerificationResult> {
     const recipient = normalizeAddress(intent.recipient);
     const minimumAmount = toBigInt(intent.amount);
 
     let detected: { hash: Hash; confirmations: number } | null = null;
+    let blocksIterated = 0;
+    let transactionsExamined = 0;
+    let recipientCandidates = 0;
+    const verboseCandidates: Array<{ txHash: Hash; value: string; blockNumber: string }> = [];
 
     for (let blockNumber = currentBlock; blockNumber >= fromBlock; blockNumber -= 1n) {
+      blocksIterated += 1;
       const block = await this.client.getBlock({ blockNumber, includeTransactions: true });
+      transactionsExamined += block.transactions.length;
       const tx = block.transactions.find((candidate) => {
         if (!candidate.to || candidate.blockNumber === null) {
           return false;
         }
-        return normalizeAddress(candidate.to) === recipient && candidate.value >= minimumAmount;
+        const isRecipientMatch = normalizeAddress(candidate.to) === recipient;
+        if (isRecipientMatch) {
+          recipientCandidates += 1;
+          if (isDebugEnabled() && recipientCandidates <= 10) {
+            debugLog("verify.native.candidate", {
+              txHash: candidate.hash,
+              txValueBaseUnits: candidate.value.toString(),
+              intentAmountBaseUnits: minimumAmount.toString(),
+              comparison: "candidate.value >= intent.amount"
+            });
+          }
+          if (isVerboseEnabled() && verboseCandidates.length < 10) {
+            verboseCandidates.push({
+              txHash: candidate.hash,
+              value: candidate.value.toString(),
+              blockNumber: candidate.blockNumber.toString()
+            });
+          }
+        }
+        return isRecipientMatch && candidate.value >= minimumAmount;
       });
 
       if (tx && tx.blockNumber !== null) {
@@ -289,6 +397,13 @@ export class ArbitrumAdapter implements ChainAdapter {
         break;
       }
     }
+
+    debugLog("verify.native.scan_summary", {
+      blocksIterated,
+      transactionsExamined,
+      recipientCandidates,
+      verboseCandidates: isVerboseEnabled() ? verboseCandidates : undefined
+    });
 
     if (!detected) {
       return { status: "PENDING", reason: "matching transaction not found in scan range" };
@@ -307,7 +422,7 @@ export class ArbitrumAdapter implements ChainAdapter {
     };
   }
 
-  private async verifyErc20(intent: PaymentIntent): Promise<VerificationResult> {
+  private async verifyErc20(intent: PaymentIntent, currentBlock: bigint, fromBlock: bigint): Promise<VerificationResult> {
     if (!intent.asset.contractAddress) {
       return {
         status: "FAILED",
@@ -316,23 +431,98 @@ export class ArbitrumAdapter implements ChainAdapter {
       };
     }
 
-    const currentBlock = await this.client.getBlockNumber();
-    const fromBlock = currentBlock > this.scanBlocks ? currentBlock - this.scanBlocks : 0n;
     const recipient = normalizeAddress(intent.recipient);
     const minimumAmount = toBigInt(intent.amount);
     const contractAddress = normalizeAddress(intent.asset.contractAddress);
+    const topic2To = pad(recipient);
+    const query = buildErc20TransferLogQuery(contractAddress, recipient, fromBlock, currentBlock);
 
-    const logs = await this.client.getLogs({
-      address: contractAddress,
-      event: transferEvent,
-      args: { to: recipient },
-      fromBlock,
-      toBlock: currentBlock
+    debugLog("verify.erc20.filter", {
+      transferTopic0,
+      topic2To,
+      fromBlock: fromBlock.toString(),
+      toBlock: currentBlock.toString()
     });
+    if (shouldDumpFilters()) {
+      debugLog("verify.erc20.filter.dump", {
+        address: query.address,
+        args: query.args,
+        fromBlock: query.fromBlock.toString(),
+        toBlock: query.toBlock.toString()
+      });
+    }
+
+    let logs: Erc20TransferLog[];
+    try {
+      logs = await this.client.getLogs(query);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown getLogs error";
+      const lowerMessage = message.toLowerCase();
+      const isRangeLimit =
+        lowerMessage.includes("query returned more than") ||
+        lowerMessage.includes("block range") ||
+        lowerMessage.includes("response size exceeded") ||
+        lowerMessage.includes("limit exceeded");
+
+      if (isRangeLimit && isDebugEnabled()) {
+        let chunkFrom = fromBlock;
+        while (chunkFrom <= currentBlock) {
+          const chunkTo = chunkFrom + ERC20_LOG_CHUNK_SIZE <= currentBlock ? chunkFrom + ERC20_LOG_CHUNK_SIZE : currentBlock;
+          try {
+            const chunkLogs = await this.client.getLogs(buildErc20TransferLogQuery(contractAddress, recipient, chunkFrom, chunkTo));
+            debugLog("verify.erc20.chunk_logs", {
+              chunkFrom: chunkFrom.toString(),
+              chunkTo: chunkTo.toString(),
+              count: chunkLogs.length
+            });
+          } catch (chunkError) {
+            debugLog("verify.erc20.chunk_logs_error", {
+              chunkFrom: chunkFrom.toString(),
+              chunkTo: chunkTo.toString(),
+              message: chunkError instanceof Error ? chunkError.message : String(chunkError)
+            });
+          }
+
+          if (chunkTo === currentBlock) {
+            break;
+          }
+          chunkFrom = chunkTo + 1n;
+        }
+      }
+
+      if (isRangeLimit) {
+        return {
+          status: "FAILED",
+          reason: "rpc eth_getLogs range limit encountered; reduce EVM_SCAN_BLOCKS or use DEBUG_WPIS chunk diagnostics",
+          errorCode: "RPC_ERROR"
+        };
+      }
+
+      throw error;
+    }
+    debugLog("verify.erc20.logs", { count: logs.length });
+
+    if (logs.length === 0 && isDebugEnabled()) {
+      let chunkFrom = fromBlock;
+      while (chunkFrom <= currentBlock) {
+        const chunkTo = chunkFrom + ERC20_LOG_CHUNK_SIZE <= currentBlock ? chunkFrom + ERC20_LOG_CHUNK_SIZE : currentBlock;
+        const chunkLogs = await this.client.getLogs(buildErc20TransferLogQuery(contractAddress, recipient, chunkFrom, chunkTo));
+        debugLog("verify.erc20.chunk_logs", {
+          chunkFrom: chunkFrom.toString(),
+          chunkTo: chunkTo.toString(),
+          count: chunkLogs.length
+        });
+        if (chunkTo === currentBlock) {
+          break;
+        }
+        chunkFrom = chunkTo + 1n;
+      }
+    }
 
     const match = logs.find((entry) => {
       const value = entry.args.value;
-      return entry.blockNumber !== null && value !== undefined && value >= minimumAmount;
+      const logRecipient = entry.args.to ? normalizeAddress(entry.args.to) : null;
+      return entry.blockNumber !== null && value !== undefined && logRecipient === recipient && value >= minimumAmount;
     });
 
     if (!match || match.blockNumber === null || match.transactionHash === null) {
@@ -358,5 +548,5 @@ export function createArbitrumAdapter(options?: ArbitrumAdapterOptions): Arbitru
   return new ArbitrumAdapter(options);
 }
 
-export const ARBITRUM_ONE_CAIP2 = ARBITRUM_CAIP2;
-export const ARBITRUM_ONE_CHAIN_ID = ARBITRUM_CHAIN_ID;
+export const ARBITRUM_SEPOLIA_CAIP2 = DEFAULT_ARBITRUM_SEPOLIA_CAIP2;
+export const ARBITRUM_SEPOLIA_CHAIN = DEFAULT_ARBITRUM_SEPOLIA_CHAIN_ID;

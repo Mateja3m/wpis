@@ -56,6 +56,9 @@ Variables:
 - `PORT`: verifier HTTP port.
 - `NEXT_PUBLIC_VERIFIER_URL`: frontend target verifier URL.
 - `NEXT_PUBLIC_CHAIN_ID`: chain id sent by demo app (`eip155:421614` for Sepolia).
+- `DEBUG_WPIS`: enable adapter/verifier debug diagnostics (`1` = on).
+- `DEBUG_WPIS_VERBOSE`: log verbose native scan candidates (`1` = on).
+- `DEBUG_WPIS_DUMP_FILTERS`: print ERC20 filter object dumps (`1` = on).
 
 ## Run
 ```bash
@@ -75,6 +78,40 @@ npm run dev
 
 Troubleshooting:
 - If `Create Intent` fails with `ERR_CONNECTION_REFUSED`, verify `http://localhost:4000/health` is reachable.
+
+## Debugging Pending Intents
+### Wallet Setup (Manual Send Flow)
+- Add/switch wallet network to `Arbitrum Sepolia (421614)`.
+- Fund wallet with test ETH on Arbitrum Sepolia.
+- Create intent in demo, then manually send from wallet to the exact recipient shown in modal.
+- Keep demo modal open while verifier polls status.
+
+### Troubleshooting Pending
+Checks to run in order:
+- `chainId mismatch`: confirm `GET /health` returns expected chain and your intent uses same CAIP2 chain id.
+- `scan window`: verify tx block is inside `[latest - EVM_SCAN_BLOCKS, latest]`.
+- `amount/base units`: verify intent amount is base units and tx/log value is `>= intent.amount`.
+- `ERC20 filter`: verify contract address and `Transfer(to=recipient)` filter topics are correct.
+
+Create a quick test intent from CLI:
+```bash
+npm run seed:intent -- --recipient 0xYourRecipient --amount 100000000000000 --chain-id eip155:421614
+```
+
+Debug by intent id:
+```bash
+DEBUG_WPIS=1 DEBUG_WPIS_DUMP_FILTERS=1 npm run debug:intent -- --intent-id <INTENT_ID> --verifier-url http://localhost:4000
+```
+
+Debug by JSON file:
+```bash
+DEBUG_WPIS=1 npm run debug:intent -- --intent-file /absolute/path/intent.json
+```
+
+`debug:intent` exit codes:
+- `0`: matching on-chain transfer found.
+- `1`: no match found in active scan window.
+- `2`: configuration/runtime error (RPC unreachable, chain mismatch, invalid input).
 
 ## Test on Arbitrum Sepolia (Realistic Flow)
 1. Keep default `.env` values from `.env.example` (Sepolia settings).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import {
   Accordion,
   AccordionDetails,
@@ -23,6 +23,8 @@ import {
 } from "@mui/material";
 import type { CreateIntentInput, PaymentIntent, PaymentStatus } from "@wpis/core";
 import { QRCodeSVG } from "qrcode.react";
+import { toBaseUnits } from "../lib/amount";
+import { formatUnits } from "viem";
 
 const verifierUrl = process.env.NEXT_PUBLIC_VERIFIER_URL ?? "http://localhost:4000";
 const networkCaip2 = process.env.NEXT_PUBLIC_CHAIN_ID ?? "eip155:421614";
@@ -75,7 +77,7 @@ export default function Page(): ReactElement {
   const [recipient, setRecipient] = useState("0x1111111111111111111111111111111111111111");
   const [assetType, setAssetType] = useState<AssetType>("native");
   const [contractAddress, setContractAddress] = useState("0xaf88d065e77c8cC2239327C5EDb3A432268e5831");
-  const [amount, setAmount] = useState("1000000000000000");
+  const [amount, setAmount] = useState("0.001");
 
   const [created, setCreated] = useState<CreatedIntentPayload | null>(null);
   const [open, setOpen] = useState(false);
@@ -85,6 +87,7 @@ export default function Page(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
   const [creating, setCreating] = useState(false);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   const statusReason = (currentStatus: PaymentStatus | null): string | null => {
     if (currentStatus === "PENDING") {
@@ -95,22 +98,6 @@ export default function Page(): ReactElement {
     }
     return null;
   };
-
-  const intentInput = useMemo<CreateIntentInput>(() => {
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-    return {
-      recipient,
-      amount,
-      reference: "dev-playground-placeholder",
-      expiresAt,
-      chainId: networkCaip2,
-      asset:
-        assetType === "native"
-          ? { symbol: "ETH", decimals: 18, type: "native" }
-          : { symbol: "USDC", decimals: 6, type: "erc20", contractAddress },
-      confirmationPolicy: { minConfirmations: 1 }
-    };
-  }, [amount, assetType, contractAddress, networkCaip2, recipient]);
 
   useEffect(() => {
     if (!open || !created?.intent.id) {
@@ -185,13 +172,24 @@ export default function Page(): ReactElement {
     setCreating(true);
     setError(null);
     try {
+      const asset = assetType === "native"
+        ? { symbol: "ETH", decimals: 18, type: "native" as const }
+        : { symbol: "USDC", decimals: 6, type: "erc20" as const, contractAddress };
+      const amountBaseUnits = toBaseUnits(amount, asset.decimals);
+      const input: CreateIntentInput = {
+        recipient,
+        amount: amountBaseUnits,
+        reference: generateReference(),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        chainId: networkCaip2,
+        asset,
+        confirmationPolicy: { minConfirmations: 1 }
+      };
+
       const response = await fetchWithTimeout(`${verifierUrl}/intents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...intentInput,
-          reference: generateReference()
-        })
+        body: JSON.stringify(input)
       });
 
       if (!response.ok) {
@@ -212,6 +210,15 @@ export default function Page(): ReactElement {
       setError("Verifier API is unreachable. Check that http://localhost:4000/health is online.");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const copyValue = async (label: string, value: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyMessage(`${label} copied.`);
+    } catch {
+      setCopyMessage(`Failed to copy ${label.toLowerCase()}.`);
     }
   };
 
@@ -266,7 +273,7 @@ export default function Page(): ReactElement {
           ) : null}
 
           <TextField
-            label="Amount (base units)"
+            label="Amount (human units)"
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             fullWidth
@@ -299,6 +306,7 @@ export default function Page(): ReactElement {
           </Button>
 
           {error ? <Alert severity="error">{error}</Alert> : null}
+          {copyMessage ? <Alert severity="info">{copyMessage}</Alert> : null}
         </Stack>
       </Paper>
 
@@ -308,8 +316,38 @@ export default function Page(): ReactElement {
           <Stack spacing={2.5}>
             {created ? (
               <>
+                <Typography variant="subtitle2">Manual Send (Primary)</Typography>
+                <Stack spacing={1}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                    <Typography variant="body2">Recipient: {created.intent.recipient}</Typography>
+                    <Button size="small" onClick={() => void copyValue("Recipient", created.intent.recipient)}>
+                      Copy
+                    </Button>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                    <Typography variant="body2">
+                      Amount: {formatUnits(BigInt(created.intent.amount), created.intent.asset.decimals)} {created.intent.asset.symbol}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                    <Typography variant="body2">Amount (base units): {created.intent.amount}</Typography>
+                    <Button size="small" onClick={() => void copyValue("Amount (base units)", created.intent.amount)}>
+                      Copy
+                    </Button>
+                  </Box>
+                  <Typography variant="body2">Network: Arbitrum Sepolia (421614)</Typography>
+                  <Stack spacing={0.5} sx={{ pl: 0.5 }}>
+                    <Typography variant="body2">1. Open your wallet and switch to Arbitrum Sepolia.</Typography>
+                    <Typography variant="body2">2. Send the amount above to the exact recipient.</Typography>
+                    <Typography variant="body2">3. Keep this modal open while verifier polls status.</Typography>
+                  </Stack>
+                </Stack>
+
+                <Typography variant="subtitle2" sx={{ pt: 1 }}>
+                  Best-effort (wallet support varies)
+                </Typography>
                 <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
-                  <QRCodeSVG value={created.paymentRequest.qrPayload} size={180} />
+                  <QRCodeSVG value={created.paymentRequest.qrPayload} size={160} />
                 </Box>
 
                 <Typography variant="body2">

@@ -35,6 +35,10 @@ function structuredLog(type: string, payload: Record<string, unknown>): void {
   console.info(JSON.stringify(event));
 }
 
+function isDebugEnabled(): boolean {
+  return process.env.DEBUG_WPIS === "1";
+}
+
 function asErrorCode(error: unknown): WpisErrorCode | undefined {
   if (typeof error !== "object" || error === null) {
     return undefined;
@@ -102,6 +106,7 @@ export function createVerifierServer(): VerifierServer {
     }
 
     const task = (async (): Promise<VerificationResult> => {
+      const startedAt = Date.now();
       const beforeVerify = db.getIntent(intentId);
       if (!beforeVerify) {
         return { status: "FAILED", reason: "intent not found" };
@@ -122,7 +127,8 @@ export function createVerifierServer(): VerifierServer {
         updated,
         txHash: result.txHash,
         confirmations: result.confirmations ?? null,
-        errorCode: result.errorCode ?? null
+        errorCode: result.errorCode ?? null,
+        durationMs: Date.now() - startedAt
       });
       return { ...result, status: nextStatus };
     })();
@@ -197,19 +203,44 @@ export function createVerifierServer(): VerifierServer {
   });
 
   const intervalHandle = setInterval(async () => {
+    const pollStartedAt = Date.now();
     const intents = db.listPendingIntents();
+    const errorCounts: Record<string, number> = {};
+    const verifyDurationsMs: number[] = [];
     for (const intent of intents) {
       try {
+        const verifyStartedAt = Date.now();
         await verifyIntent(intent.id, "intent.poll.verify");
-      } catch {
+        verifyDurationsMs.push(Date.now() - verifyStartedAt);
+      } catch (error) {
         const updated = db.updateIntentStatus(intent.id, "FAILED", { status: "FAILED", reason: "verifier exception" });
+        const errorCode = asErrorCode(error) ?? "UNKNOWN";
         structuredLog("intent.poll.verify_error", {
           intentId: intent.id,
           previousStatus: intent.status,
           nextStatus: "FAILED",
-          updated
+          updated,
+          errorCode
         });
+        errorCounts[errorCode] = (errorCounts[errorCode] ?? 0) + 1;
       }
+    }
+    if (isDebugEnabled()) {
+      const counts = db.getStatusCounts();
+      const avgVerifyDurationMs =
+        verifyDurationsMs.length > 0
+          ? Number((verifyDurationsMs.reduce((sum, value) => sum + value, 0) / verifyDurationsMs.length).toFixed(2))
+          : 0;
+      structuredLog("intent.poll.summary", {
+        checkedIntents: intents.length,
+        pending: counts.pending,
+        detected: counts.detected,
+        expired: counts.expired,
+        verifiedCalls: verifyDurationsMs.length,
+        avgVerifyDurationMs,
+        pollDurationMs: Date.now() - pollStartedAt,
+        errors: errorCounts
+      });
     }
   }, 10_000);
 
