@@ -344,7 +344,7 @@ export default function Page(): ReactElement {
                 </Stack>
 
                 <Typography variant="subtitle2" sx={{ pt: 1 }}>
-                  Best-effort (wallet support varies)
+                  Payment Link / QR (Optional)
                 </Typography>
                 <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
                   <QRCodeSVG value={created.paymentRequest.qrPayload} size={160} />
