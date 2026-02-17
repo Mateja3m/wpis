@@ -1,26 +1,48 @@
 {
-  "name": "@wpis/adapter-arbitrum",
+  "name": "@idoa/wpis-adapter-arbitrum",
   "version": "0.1.0",
+  "description": "Arbitrum adapter for WPIS payment intent verification.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "prebuild": "npm --workspace @wpis/core run build",
-    "pretest": "npm --workspace @wpis/core run build"
+    "prebuild": "npm --workspace @idoa/wpis-core run build",
+    "pretest": "npm --workspace @idoa/wpis-core run build"
   },
   "dependencies": {
-    "@wpis/core": "0.1.0",
+    "@idoa/wpis-core": "0.1.0",
     "viem": "^2.23.5"
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
+  },
+  "keywords": [
+    "wpis",
+    "web3",
+    "arbitrum",
+    "adapter",
+    "viem"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mateja3m/wpis.git"
+  },
+  "author": "Milan Matejic",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -22,7 +22,7 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import type { CreateIntentInput, PaymentIntent, PaymentStatus } from "@wpis/core";
+import type { CreateIntentInput, PaymentIntent, PaymentStatus } from "@idoa/wpis-core";
 import { QRCodeSVG } from "qrcode.react";
 import { toBaseUnits } from "../lib/amount";
 import { formatUnits } from "viem";

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactElement } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import type { PaymentIntent, PaymentStatus } from "@wpis/core";
+import type { PaymentIntent, PaymentStatus } from "@idoa/wpis-core";
 
 export interface PaymentModalProps {
   isOpen: boolean;

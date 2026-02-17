@@ -12,15 +12,15 @@
     "test": "vitest run --passWithNoTests",
     "dev": "node --env-file-if-exists=../../.env --import tsx src/index.ts",
     "dev:watch": "node --env-file-if-exists=../../.env --import tsx --watch src/index.ts",
-    "prebuild": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-arbitrum run build",
-    "pretest": "npm --workspace @wpis/core run build && npm --workspace @wpis/adapter-arbitrum run build"
+    "prebuild": "npm --workspace @idoa/wpis-core run build && npm --workspace @idoa/wpis-adapter-arbitrum run build",
+    "pretest": "npm --workspace @idoa/wpis-core run build && npm --workspace @idoa/wpis-adapter-arbitrum run build"
   },
   "dependencies": {
-    "@wpis/adapter-arbitrum": "0.1.0",
-    "@wpis/core": "0.1.0",
     "better-sqlite3": "^11.8.1",
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "@idoa/wpis-core": "0.1.0",
+    "@idoa/wpis-adapter-arbitrum": "0.1.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",

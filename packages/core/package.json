@@ -1,11 +1,16 @@
 {
-  "name": "@wpis/core",
+  "name": "@idoa/wpis-core",
   "version": "0.1.0",
+  "description": "Deterministic payment intent primitives for WPIS.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -14,7 +19,24 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
+  },
+  "keywords": [
+    "wpis",
+    "web3",
+    "payment-intent",
+    "arbitrum",
+    "sdk"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mateja3m/wpis.git"
+  },
+  "author": "Milan Matejic",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
   }
 }

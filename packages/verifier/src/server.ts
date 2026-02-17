@@ -1,8 +1,8 @@
 import express, { type Request, type Response } from "express";
 import cors from "cors";
-import { canTransition, type WpisErrorCode } from "@wpis/core";
-import { createArbitrumAdapter } from "@wpis/adapter-arbitrum";
-import type { CreateIntentInput, PaymentStatus, VerificationResult } from "@wpis/core";
+import { canTransition, type WpisErrorCode } from "@idoa/wpis-core";
+import { createArbitrumAdapter } from "@idoa/wpis-adapter-arbitrum";
+import type { CreateIntentInput, PaymentStatus, VerificationResult } from "@idoa/wpis-core";
 import { VerifierDb } from "./db.js";
 
 export interface VerifierServer {

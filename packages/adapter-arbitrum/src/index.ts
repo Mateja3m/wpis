@@ -8,7 +8,7 @@ import {
   type PaymentIntent,
   type PaymentRequest,
   type VerificationResult
-} from "@wpis/core";
+} from "@idoa/wpis-core";
 import { createPublicClient, getAddress, http, pad, parseAbiItem, toEventSelector, type Address, type Hash } from "viem";
 import { arbitrum, arbitrumSepolia } from "viem/chains";
 

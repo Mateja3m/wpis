@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getAddress, pad, parseAbiItem, toEventSelector } from "viem";
-import type { PaymentIntent } from "@wpis/core";
+import type { PaymentIntent } from "@idoa/wpis-core";
 import {
   ArbitrumAdapter,
   buildErc20TransferLogQuery,

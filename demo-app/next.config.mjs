@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@wpis/react", "@wpis/core"]
+  transpilePackages: ["@wpis/react", "@idoa/wpis-core"]
 };
 
 export default nextConfig;

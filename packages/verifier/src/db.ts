@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { canTransition, type PaymentIntent, type PaymentStatus, type VerificationResult } from "@wpis/core";
+import { canTransition, type PaymentIntent, type PaymentStatus, type VerificationResult } from "@idoa/wpis-core";
 
 export interface StoredIntent {
   id: string;

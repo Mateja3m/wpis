@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { createPublicClient, http, pad, parseAbiItem, toEventSelector, type Address, type Hash } from "viem";
-import type { PaymentIntent } from "@wpis/core";
+import type { PaymentIntent } from "@idoa/wpis-core";
 
 const transferEvent = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 const transferTopic0 = toEventSelector(transferEvent);

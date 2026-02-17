@@ -1,33 +1,29 @@
-# @wpis/core
+# @idoa/wpis-core
 
-Developer-focused primitives for deterministic payment intent lifecycle and verification state management.
+Core WPIS types and deterministic intent lifecycle utilities.
 
-## Intent Lifecycle
+## Install
 
-```text
-PENDING --(matching tx seen)--> DETECTED --(confirmations >= policy)--> CONFIRMED
-   |                                |                                     
-   |--(expiresAt reached)---------->|---------------> EXPIRED            
-   |--(verification error)---------------------------------> FAILED       
+```bash
+npm i @idoa/wpis-core
 ```
 
-Terminal states: `CONFIRMED`, `EXPIRED`, `FAILED`.
-State regression is disallowed by transition rules.
+## Usage
 
-## Verification Guarantees
-- Deterministic status transitions (`transitionStatus` enforces legal edges only).
-- Explicit expiration checks (`isIntentExpired` / `isExpired`).
-- Validation-first intent creation guards malformed input.
-- Unit test coverage target for this package is 85%+.
-- Error taxonomy is explicit and typed:
-  - `VALIDATION_ERROR`
-  - `RPC_ERROR`
-  - `EXPIRED_ERROR`
-  - `CONFIRMATION_PENDING`
-  - `CHAIN_MISMATCH`
+```ts
+import { validateCreateIntentInput, transitionStatus, type CreateIntentInput } from "@idoa/wpis-core";
 
-## Arbitrum Alignment
-This package is chain-agnostic but designed to support Arbitrum-first adapters by:
-- preserving CAIP-like chain identifiers (`eip155:421614` in adapter layer PoC default),
-- enforcing deterministic status semantics needed for reproducible verifier behavior,
-- separating domain logic from chain access to keep tooling composable.
+const input: CreateIntentInput = {
+  chainId: "eip155:421614",
+  recipient: "0x1111111111111111111111111111111111111111",
+  amount: "1000000000000000",
+  reference: "example-reference",
+  expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+  asset: { symbol: "ETH", decimals: 18, type: "native" }
+};
+
+validateCreateIntentInput(input);
+const next = transitionStatus("PENDING", "DETECTED");
+```
+
+For monorepo development, see the repository root README.

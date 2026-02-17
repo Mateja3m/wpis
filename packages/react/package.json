@@ -10,16 +10,16 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "prebuild": "npm --workspace @wpis/core run build",
-    "pretest": "npm --workspace @wpis/core run build"
+    "prebuild": "npm --workspace @idoa/wpis-core run build",
+    "pretest": "npm --workspace @idoa/wpis-core run build"
   },
   "peerDependencies": {
     "react": "^18.3.1 || ^19.0.0",
     "react-dom": "^18.3.1 || ^19.0.0"
   },
   "dependencies": {
-    "@wpis/core": "0.1.0",
-    "qrcode.react": "^4.2.0"
+    "qrcode.react": "^4.2.0",
+    "@idoa/wpis-core": "0.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.2",

@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type ReactElement } from "react";
-import type { CreateIntentInput, PaymentIntent } from "@wpis/core";
+import type { CreateIntentInput, PaymentIntent } from "@idoa/wpis-core";
 
 export interface CreatedIntentPayload {
   intent: PaymentIntent;
