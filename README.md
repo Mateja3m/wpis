@@ -1,4 +1,4 @@
-# WPIS - Web3 Payment Infrastructure Standard (Arbitrum PoC) - Work in Progress
+# WPIS - Web3 Payment Infrastructure Standard (Arbitrum PoC)
 
 Infrastructure-only developer tooling primitive for deterministic payment intent verification.
 
