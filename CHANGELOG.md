@@ -12,3 +12,4 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Clarified Arbitrum network positioning: production target Arbitrum One, local test harness Arbitrum Sepolia.
+- Aligned package naming and documentation to published npm packages: `@idoa/wpis-core` and `@idoa/wpis-adapter-arbitrum`.

@@ -11,8 +11,8 @@ Infrastructure-only developer tooling primitive for deterministic payment intent
 ```text
 /wpis
   /packages
-    /core                     -> publish as @idoa/wpis-core
-    /adapter-arbitrum         -> publish as @idoa/wpis-adapter-arbitrum
+    /core                     -> published as @idoa/wpis-core
+    /adapter-arbitrum         -> published as @idoa/wpis-adapter-arbitrum
     /verifier
     /react
   /demo-app
@@ -45,10 +45,16 @@ Key variables:
 - `NEXT_PUBLIC_VERIFIER_URL`
 - `NEXT_PUBLIC_CHAIN_ID`
 
-## Publishing Packages
-Target public packages:
+## Published Packages (npm)
 - `@idoa/wpis-core`
 - `@idoa/wpis-adapter-arbitrum`
+
+Install:
+```bash
+npm i @idoa/wpis-core @idoa/wpis-adapter-arbitrum
+```
+
+## Publishing New Versions
 
 Prerequisites:
 1. Own npm scope access for `@idoa`
@@ -61,7 +67,7 @@ npm -w packages/core publish --access public
 npm -w packages/adapter-arbitrum publish --access public
 ```
 
-Note: first publish of scoped package must use `--access public`.
+Note: first publish of scoped package must use `--access public`. For subsequent versions, bump package versions first, then publish.
 
 ## Local Testing Without Publishing (`npm pack`)
 Create tarballs:
