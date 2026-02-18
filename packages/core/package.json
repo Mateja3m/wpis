@@ -1,6 +1,6 @@
 {
   "name": "@idoa/wpis-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Deterministic payment intent primitives for WPIS.",
   "type": "module",
   "main": "./dist/index.js",
